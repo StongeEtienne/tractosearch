@@ -1,17 +1,26 @@
 import setuptools
+import itertools
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 
+__version__ = '0.0.1a3'
+
 INSTALL_REQUIRES = ["numpy>=1.16.2",
                     "scipy>=1.0",
-                    "h5py>=2.5.0",
-                    "vtk>=8.1.2",
                     "tqdm>=4.29.0",
-                    "dipy>=1.0.0"],
+                    "h5py>=2.5.0",
+                    "dipy>=1.0.0",
+                    "lpqtree>=0.0.4"],
 
-TESTS_REQUIRE = ['pytest', 'pytest-cov']
+TESTS_REQUIRE = ['pytest',
+                 'pytest-cov']
+
+# Extra requirements, add a keyword 'all' with all extra dependencies
+EXTRAS_REQUIRE = {'numba': ['numba>=0.53']}
+EXTRAS_REQUIRE['all'] = list(itertools.chain.from_iterable(EXTRAS_REQUIRE.values()))
+
 
 setuptools.setup(
     name='tractosearch',
@@ -22,9 +31,9 @@ setuptools.setup(
     description='Fast Tractography Streamline Search',
     long_description='',
     license='BSD 3-Clause',
-    ext_modules=ext_modules,
     packages=['tractosearch'],
     install_requires=INSTALL_REQUIRES,
     tests_require=TESTS_REQUIRE,
+    extras_require=EXTRAS_REQUIRE,
     zip_safe=False,
 )
