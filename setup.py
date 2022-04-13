@@ -30,7 +30,7 @@ setuptools.setup(
     url='https://github.com/StongeEtienne/tractosearch',
     description='Fast Tractography Streamline Search',
     long_description='',
-    license='BSD 3-Clause',
+    license='BSD 2-Clause',
     packages=['tractosearch'],
     install_requires=INSTALL_REQUIRES,
     tests_require=TESTS_REQUIRE,

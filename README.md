@@ -1,3 +1,9 @@
+
+[![image info](./doc/_static/tractosearch_big_logo.svg)](https://github.com/StongeEtienne/tractosearch/)
+
+[![image info](https://img.shields.io/pypi/v/tractosearch.svg)](https://pypi.python.org/pypi/tractosearch)
+[![image info](https://img.shields.io/badge/License-BSD%202--Clause-blue.svg)](https://github.com/StongeEtienne/tractosearch/blob/master/LICENSE)
+
 ## TractoSearch: Fast Tractography Streamline Search
 A python package to efficiently search streamlines inside tractograms or Atlases.  
 It generalizes k-nearest neighbors and radius search to tractography streamlines.  
