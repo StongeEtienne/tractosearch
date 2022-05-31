@@ -9,7 +9,7 @@ from tractosearch.resampling import resample_slines_to_array
 
 
 def knn_search(slines, slines_ref, k=1, metric="l21", both_dir=True, resample=24,
-               use_meanpts=True, nb_cpu=4, search_dtype=np.float32):
+               meanpts_resampling=True, nb_cpu=4, search_dtype=np.float32):
     """
     Compute k-nearest neighbors (knn) for each "slines" searching into "slines_ref",
     and return a numpy of reference indices and distances.
@@ -32,7 +32,7 @@ def knn_search(slines, slines_ref, k=1, metric="l21", both_dir=True, resample=24
         (when streamline orientation is not relevant, such that A-B-C = C-B-A)
     resample : integer
         Resample each streamline with this number of points
-    use_meanpts : bool
+    meanpts_resampling : bool
         Resample streamlines using the mean-points method
     nb_cpu : integer
         Number of processor cores (multithreading)
@@ -54,7 +54,7 @@ def knn_search(slines, slines_ref, k=1, metric="l21", both_dir=True, resample=24
     assert(k > 0)
     slines_arr, slines_arr_ref = search_slines_to_array(
         slines, slines_ref, both_dir=both_dir, resample=resample,
-        use_meanpts=use_meanpts, search_dtype=search_dtype)
+        meanpts_resampling=meanpts_resampling, search_dtype=search_dtype)
 
     ids_ref, dists = knn_search_arr(slines_arr, slines_arr_ref, k=k, metric=metric, nb_cpu=nb_cpu)
 
@@ -68,7 +68,7 @@ def knn_search(slines, slines_ref, k=1, metric="l21", both_dir=True, resample=24
 
 
 def radius_search(slines, slines_ref, radius, metric="l21", both_dir=True, resample=24,
-                  use_meanpts=True, lp1_mpts=4, nb_cpu=4, search_dtype=np.float32):
+                  meanpts_resampling=True, lp1_mpts=4, nb_cpu=4, search_dtype=np.float32):
     """
     Compute radius search for each streamlines in "slines" searching into "slines_ref",
     and return a scipy COOrdinates sparse matrix containing the neighborhood information.
@@ -92,7 +92,7 @@ def radius_search(slines, slines_ref, radius, metric="l21", both_dir=True, resam
         (when streamline orientation is not relevant, such that A-B-C = C-B-A)
     resample : integer
         Resample each streamline with this number of points
-    use_meanpts : bool
+    meanpts_resampling : bool
         Resample streamlines using the mean-points method
     lp1_mpts : integer
         Internal mean-points for the l1 hierarchical search
@@ -115,7 +115,7 @@ def radius_search(slines, slines_ref, radius, metric="l21", both_dir=True, resam
 
     slines_arr, slines_arr_ref = search_slines_to_array(
         slines, slines_ref, both_dir=both_dir, resample=resample,
-        use_meanpts=use_meanpts, search_dtype=search_dtype)
+        meanpts_resampling=meanpts_resampling, search_dtype=search_dtype)
 
     coo_mtx = radius_search_arr(slines_arr, slines_arr_ref, radius, metric=metric, lp1_mpts=lp1_mpts, nb_cpu=nb_cpu)
 
@@ -155,7 +155,7 @@ def radius_search_arr(slines_arr, slines_ref_arr, radius, metric="l21", lp1_mpts
 
 
 def search_slines_to_array(slines, slines_ref, both_dir=True, resample=24,
-                           use_meanpts=True, search_dtype=np.float32):
+                           meanpts_resampling=True, search_dtype=np.float32):
     """
     Utility function to reformat streamlines to numnpy array before search.
 
@@ -172,7 +172,7 @@ def search_slines_to_array(slines, slines_ref, both_dir=True, resample=24,
         (when streamline orientation is not relevant, such that A-B-C = C-B-A)
     resample : integer
         Resample each streamline with this number of points
-    use_meanpts : bool
+    meanpts_resampling : bool
         Resample streamlines using the mean-points method
 
     Returns
@@ -188,7 +188,8 @@ def search_slines_to_array(slines, slines_ref, both_dir=True, resample=24,
         slines_arr = slines
     else:
         # resample slines
-        slines_arr = resample_slines_to_array(slines, resample, use_meanpts=use_meanpts,
+        slines_arr = resample_slines_to_array(slines, resample,
+                                              meanpts_resampling=meanpts_resampling,
                                               out_dtype=search_dtype)
     if slines_ref is None:
         # slines_ref is None => copy slines
@@ -198,7 +199,8 @@ def search_slines_to_array(slines, slines_ref, both_dir=True, resample=24,
         slines_arr_ref = slines_ref
     else:
         # resample slines
-        slines_arr_ref = resample_slines_to_array(slines_ref, resample, use_meanpts=use_meanpts,
+        slines_arr_ref = resample_slines_to_array(slines_ref, resample,
+                                                  meanpts_resampling=meanpts_resampling,
                                                   out_dtype=search_dtype)
 
     if both_dir:

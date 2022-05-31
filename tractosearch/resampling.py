@@ -17,10 +17,12 @@ except ImportError:
 
 
 RTYPE = np.float64
+OUTTYPE = np.float32
 EPS = RTYPE(1.0e-8)
 
 
-def resample_slines_to_array(slines, nb_pts, use_meanpts=True, out_dtype=None):
+@njit()
+def resample_slines_to_array(slines, nb_pts, meanpts_resampling=True, out_dtype=OUTTYPE):
     """
     Resample a list of streamlines to a given number of points
 
@@ -30,7 +32,7 @@ def resample_slines_to_array(slines, nb_pts, use_meanpts=True, out_dtype=None):
         Streamlines
     nb_pts : integer
         Resample with this number of points
-    use_meanpts : bool
+    meanpts_resampling : bool
         Resample streamlines using mean-points method
     out_dtype : float data type
         Floating precision for the resulting points
@@ -48,22 +50,71 @@ def resample_slines_to_array(slines, nb_pts, use_meanpts=True, out_dtype=None):
         International Workshop on Computational Diffusion MRI,
         pp. 82-95. Springer, Cham, 2021.
     """
-    if not out_dtype:
-        out_dtype = slines[0].dtype
-
-    nb_slines = len(slines)
     nb_dim = slines[0].shape[-1]
-    slines_arr = np.zeros([nb_slines, nb_pts, nb_dim], dtype=out_dtype)
+    slines_arr = np.zeros((len(slines), nb_pts, nb_dim), dtype=out_dtype)
 
-    for i in range(nb_slines):
-        sline_i = slines[i].astype(RTYPE)
+    for i, sline in enumerate(slines):
+        sline_i = sline.astype(RTYPE)
         if len(sline_i) == nb_pts or len(sline_i) == 1:
             slines_arr[i] = sline_i
-        elif use_meanpts:
-            slines_arr[i] = meanpts_sline(sline_i, nb_pts)
+        elif meanpts_resampling:
+            slines_arr[i] = meanpts_sline(sline_i, nb_mpts=nb_pts)
         else:
             slines_arr[i] = resample_sline(sline_i, nb_pts)
     return slines_arr
+
+
+@njit()
+def split_slines_to_array(slines, mpts_length, nb_mpts, overlap, out_dtype=OUTTYPE):
+    """
+    Split each streamlines in separates group of mean-points
+
+    Parameters
+    ----------
+    slines : list of numpy array
+        Streamlines
+    mpts_length : float
+        Length of each mean-points averaging (integral)
+    nb_mpts : integer
+        Number of mean-points per sub-streamline
+    overlap : integer
+        overlap in number of mean-points
+    out_dtype : float data type
+        Floating precision for the resulting points
+        float32 is suggested to reduce memory size and search computation speed
+        None re-use the input (slines) data type
+
+    Returns
+    -------
+    res : numpy array (nb_slines x nb_pts x d)
+        Resampled representation of all streamlines
+
+    References
+    ----------
+    .. [StOnge2021] St-Onge E. et al., Fast Tractography Streamline Search,
+        International Workshop on Computational Diffusion MRI,
+        pp. 82-95. Springer, Cham, 2021.
+    """
+    # if overlap >= nb_mpts:
+    #     raise ValueError(f"overlap must be smaller than nb_mpts")
+    # if not out_dtype:
+    #     out_dtype = slines[0].dtype
+
+    sub_slines = []
+
+    slines_ids = np.zeros(len(slines), dtype=np.int32)
+    for i, sline in enumerate(slines):
+        mpts_arr = meanpts_sline(sline.astype(RTYPE), mpts_length=mpts_length)
+        it = range(0, len(mpts_arr) - nb_mpts + 1, nb_mpts - overlap)
+        slines_ids[i] = len(it)
+        for n in it:
+            sub_slines.append(mpts_arr[n: n + nb_mpts])
+
+    arr = np.zeros((slines_ids.sum(), nb_mpts, slines[0].shape[-1]), dtype=out_dtype)
+    for i, t in enumerate(sub_slines):
+        arr[i] = t
+
+    return arr, slines_ids
 
 
 def aggregate_meanpts(slines_arr, nb_mpts, flatten_output=False):
@@ -156,7 +207,7 @@ def resample_sline(sline, nb_rpts):
 
 
 @njit()
-def meanpts_sline(sline, nb_mpts=None):
+def meanpts_sline(sline, nb_mpts: int = 0, mpts_length: float = 0.0):
     """
     Resample / Average streamlines using mean-points method,
     averaging segments position base on trapezoidal rule
@@ -168,10 +219,11 @@ def meanpts_sline(sline, nb_mpts=None):
         Streamline
     nb_mpts : integer
         Resample with this number of mean-points
-        => (desired_length = streamline_length / nb_mpts)
-    # desired_length : float
-    #     Resample by averaging
-    #     => (nb_mpts = streamline_length // desired_length)
+        => (mpts_length = streamline_length / nb_mpts)
+    mpts_length : integer
+        Resample by averaging to this length
+        => (nb_mpts = streamline_length / mpts_length)
+        Only one of nb_mpts/mpts_length need to be set
 
     Returns
     -------
@@ -184,23 +236,21 @@ def meanpts_sline(sline, nb_mpts=None):
         International Workshop on Computational Diffusion MRI,
         pp. 82-95. Springer, Cham, 2021.
     """
-    # Verify input
-    # if nb_mpts and desired_length:
-    #     raise ValueError(f"nb_mpts or desired_length need to given")
-    # elif nb_mpts is None and desired_length is None:
-    #     raise ValueError(f"nb_mpts or desired_length need to given (not both)")
 
     # Get the lengths of each segment
     # seg_lenghts = sline_segments_lengths(sline, normalize=False) # jit optimisation
     seg_lenghts = np.sqrt(np.sum(np.square(sline[1:] - sline[:-1]), axis=1))
     total_length = np.sum(seg_lenghts)
 
-    desired_length = total_length / nb_mpts
+    if nb_mpts > 0:
+        mpts_length = float(total_length / nb_mpts)
+    else:
+        nb_mpts = int(total_length // (mpts_length - EPS))
 
     # Precision estimation for segment length
     nb_dim = sline[0].shape[-1]
-    desired_length_low = desired_length - EPS
-    desired_length_up = desired_length + EPS
+    desired_length_low = mpts_length - EPS
+    desired_length_up = mpts_length + EPS
 
     # Initialize length
     cur_l = RTYPE(0.0)
@@ -224,7 +274,7 @@ def meanpts_sline(sline, nb_mpts=None):
             # a) Current length with next segment is still to small
             # print(["a", cur_l_with_seg, "<", desired_length])
             seg_mpt = RTYPE(0.5) * (prev_pt + sline[next_id])
-            meanpts[curr_mpts_id] += (seg_l/desired_length) * seg_mpt
+            meanpts[curr_mpts_id] += (seg_l / mpts_length) * seg_mpt
             cur_l = cur_l_with_seg
             prev_pt = sline[next_id]
             next_id += 1
@@ -234,12 +284,12 @@ def meanpts_sline(sline, nb_mpts=None):
             # print(["b", cur_l_with_seg, ">", desired_length])
             # b.1) split segment to get desired length
             #      missing_l = desired_length - cur_l
-            ratio = (desired_length - cur_l) / seg_l
+            ratio = (mpts_length - cur_l) / seg_l
             new_pts = prev_pt + ratio * (sline[next_id] - prev_pt)
 
             # b.2) compute the mid point
             seg_mpt = RTYPE(0.5) * (prev_pt + new_pts)
-            meanpts[curr_mpts_id] += (ratio*seg_l/desired_length) * seg_mpt
+            meanpts[curr_mpts_id] += (ratio * seg_l / mpts_length) * seg_mpt
             curr_mpts_id += 1
 
             # b.3) Setup next split
@@ -251,7 +301,7 @@ def meanpts_sline(sline, nb_mpts=None):
             # c) Current length with next segment is exactly the good length:
             # print(["c", cur_l_with_seg, "=", desired_length])
             seg_mpt = RTYPE(0.5) * (prev_pt + sline[next_id])
-            meanpts[curr_mpts_id] += (seg_l/desired_length) * seg_mpt
+            meanpts[curr_mpts_id] += (seg_l / mpts_length) * seg_mpt
             curr_mpts_id += 1
 
             cur_l = RTYPE(0.0)
@@ -355,3 +405,4 @@ def segment_length(a, b):
         Segment length between a-b
     """
     return np.sqrt(np.sum(np.square(b-a)))
+
