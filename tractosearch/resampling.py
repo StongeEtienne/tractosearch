@@ -21,7 +21,6 @@ OUTTYPE = np.float32
 EPS = RTYPE(1.0e-8)
 
 
-@njit()
 def resample_slines_to_array(slines, nb_pts, meanpts_resampling=True, out_dtype=OUTTYPE):
     """
     Resample a list of streamlines to a given number of points

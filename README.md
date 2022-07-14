@@ -53,9 +53,8 @@ ids_a = coo_mtx.row; ids_b = coo_mtx.col; rdist = coo_mtx.data
 
 ### Reference
 ```
-[StOnge2021]
-  Fast Tractography Streamline Search.
+[StOnge2022]
+  Fast Streamline Search: An Exact Technique for Diffusion MRI Tractography.
   St-Onge, E., Garyfallidis, E. and Collins, D.L.
-  In International Workshop on Computational Diffusion MRI,
-  pp. 82-95. Springer, Cham, 2021.
+  Neuroinformatics, pp. 1-12. Springer, 2022.
 ```
