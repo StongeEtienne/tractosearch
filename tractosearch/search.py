@@ -46,9 +46,9 @@ def knn_search(slines, slines_ref, k=1, metric="l21", both_dir=True, resample=24
 
     References
     ----------
-    .. [StOnge2021] St-Onge E. et al., Fast Tractography Streamline Search,
-        International Workshop on Computational Diffusion MRI,
-        pp. 82-95. Springer, Cham, 2021.
+    .. [StOnge2022] St-Onge E. et al. Fast Streamline Search:
+            An Exact Technique for Diffusion MRI Tractography.
+            Neuroinformatics, 2022.
     """
 
     assert(k > 0)
@@ -107,9 +107,9 @@ def radius_search(slines, slines_ref, radius, metric="l21", both_dir=True, resam
 
     References
     ----------
-    .. [StOnge2021] St-Onge E. et al., Fast Tractography Streamline Search,
-        International Workshop on Computational Diffusion MRI,
-        pp. 82-95. Springer, Cham, 2021.
+    .. [StOnge2022] St-Onge E. et al. Fast Streamline Search:
+            An Exact Technique for Diffusion MRI Tractography.
+            Neuroinformatics, 2022.
     """
     assert(radius > 0.0)
 

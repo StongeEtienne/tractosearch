@@ -15,7 +15,7 @@ from tractosearch.util import split_unique_indices
 
 
 DESCRIPTION = """
-    [StOnge2021] Fast Tractography Streamline Search.
+    [StOnge2022] Fast Tractography Streamline Search.
     For each streamlines in the input "in_tractogram",
     find and return the nearest in "ref_tractograms".
 
@@ -34,9 +34,9 @@ DESCRIPTION = """
 
 EPILOG = """
     References:
-        [StOnge2021] St-Onge E. et al., Fast Tractography Streamline Search,
-            International Workshop on Computational Diffusion MRI,
-            pp. 82-95. Springer, Cham, 2021.
+        [StOnge2022] St-Onge E. et al. Fast Streamline Search:
+            An Exact Technique for Diffusion MRI Tractography.
+            Neuroinformatics, 2022.
     """
 
 

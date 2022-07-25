@@ -15,7 +15,7 @@ from tractosearch.util import nearest_from_matrix_col, split_unique_indices
 
 
 DESCRIPTION = """
-    [StOnge2021] Fast Tractography Streamline Search.
+    [StOnge2022] Fast Tractography Streamline Search.
     For each streamlines in the input "in_tractogram",
     find the nearest for all "ref_tractograms" within a maximum radius,
     and return the nearest "ref_tractogram".
@@ -24,7 +24,7 @@ DESCRIPTION = """
     if the "in_tractogram" or "ref_tractograms" are not in ".trk" format
         
     The radius "mean_distance", is the average point-wise distance 
-    between two streamlines (similar to MDF). See [StOnge2021] for details.
+    between two streamlines (similar to MDF). See [StOnge2022] for details.
         
     The mapping info can be save (in .npy format) using "--save_mapping".
     For each output file, it will also return a list of streamlines indices.
@@ -38,9 +38,9 @@ DESCRIPTION = """
 
 EPILOG = """
     References:
-        [StOnge2021] St-Onge E. et al., Fast Tractography Streamline Search,
-            International Workshop on Computational Diffusion MRI,
-            pp. 82-95. Springer, Cham, 2021.
+        [StOnge2022] St-Onge E. et al. Fast Streamline Search:
+            An Exact Technique for Diffusion MRI Tractography.
+            Neuroinformatics, 2022.
     """
 
 
