@@ -175,7 +175,7 @@ def resample_sline(sline, nb_rpts):
     """
     # Resample streamline
     cumsum_seg_l = np.zeros(len(sline), dtype=RTYPE)
-    cumsum_seg_l[1:] = np.cumsum(np.sqrt(np.sum(np.square(sline[1:] - sline[:-1]), axis=1)))
+    cumsum_seg_l[1:] = np.cumsum(np.sqrt(np.sum((sline[1:] - sline[:-1]) ** 2, axis=1)))
     # cumsum_seg_l = sline_cumsum_seg_lengths(sline, normalize=False)
     step = cumsum_seg_l[-1] / (nb_rpts-1)
     res_sline = np.zeros((nb_rpts, sline.shape[1]), dtype=RTYPE)
@@ -215,7 +215,7 @@ def meanpts_sline(sline, nb_mpts: int = 0, mpts_length: float = 0.0):
     Parameters
     ----------
     sline : numpy array (n x d)
-        Streamline
+        A streamline
     nb_mpts : integer
         Resample with this number of mean-points
         => (mpts_length = streamline_length / nb_mpts)
@@ -238,7 +238,7 @@ def meanpts_sline(sline, nb_mpts: int = 0, mpts_length: float = 0.0):
 
     # Get the lengths of each segment
     # seg_lenghts = sline_segments_lengths(sline, normalize=False) # jit optimisation
-    seg_lenghts = np.sqrt(np.sum(np.square(sline[1:] - sline[:-1]), axis=1))
+    seg_lenghts = np.sqrt(np.sum((sline[1:] - sline[:-1]) ** 2, axis=1))
     total_length = np.sum(seg_lenghts)
 
     if nb_mpts > 0:
@@ -308,100 +308,3 @@ def meanpts_sline(sline, nb_mpts: int = 0, mpts_length: float = 0.0):
             next_id += 1
 
     return meanpts
-
-
-def slines_length(slines):
-    """ Compute the total length of all streamlines
-    Parameters
-    ----------
-    slines : list of numpy array
-        Streamlines
-
-    Returns
-    -------
-    res : numpy array (nb_sline x 1)
-        Array of streamlines' length
-    """
-    if isinstance(slines, np.ndarray):
-        return np.sum(np.sqrt((np.diff(np.asarray(slines), axis=1) ** 2).sum(axis=2)), axis=1)
-
-    nb_slines = len(slines)
-    slines_length = np.zeros(nb_slines, dtype=RTYPE)
-    for i in range(nb_slines):
-        slines_length[i] = sline_length(slines[i])
-    return slines_length
-
-
-def sline_length(sline):
-    """ Compute the total length of a given streamlines
-    Parameters
-    ----------
-    sline : numpy array (n x d)
-        Streamline
-
-    Returns
-    -------
-    res : float
-        Sum of all segment's length
-    """
-    diff = sline[1:] - sline[:-1]
-    return np.sum(np.sqrt(np.sum(np.square(diff), axis=1)))
-
-
-def sline_cumsum_seg_lengths(sline, normalize=False):
-    """ Compute the cumulative sum for each segment in a streamlines
-    Parameters
-    ----------
-    sline : numpy array (n x d)
-        Streamline
-    normalize : bool
-        Normalize the streamlines length to one,
-        resulting in a cumulative sum from 0.0 to 1.0
-
-    Returns
-    -------
-    res : numpy array (n x 1)
-        Cumulative sum of each segment's length, starting at zero
-    """
-    cumsum_seg_l = np.zeros(len(sline), dtype=RTYPE)
-    cumsum_seg_l[1:] = np.cumsum(sline_segments_lengths(sline, normalize=normalize))
-    return cumsum_seg_l
-
-
-def sline_segments_lengths(sline, normalize=False):
-    """ Compute the length of each segment in a streamlines
-    Parameters
-    ----------
-    sline : numpy array (n x d)
-        Streamline
-    normalize : bool
-        Normalize the streamlines length to one
-
-    Returns
-    -------
-    res : numpy array (n-1 x 1)
-        List of segment's length
-    """
-    lengths = np.sqrt(np.sum(np.square(sline[1:] - sline[:-1]), axis=1))
-    if normalize:
-        return lengths / np.sum(lengths)
-    else:
-        return lengths
-
-
-def segment_length(a, b):
-    """ Compute the euclidean length between a-b
-    Parameters
-    ----------
-    a : numpy array
-        Point
-    b : numpy array
-        Point
-
-    Returns
-    -------
-    res : float
-        Segment length between a-b
-    """
-    return np.sqrt(np.sum(np.square(b-a)))
-
