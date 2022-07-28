@@ -22,7 +22,7 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), metric="l21", both_dir=Tru
         if None is given, it assume the search is run on "slines" itself
     list_mpts : list of integer
         Resample each streamline with this number of points, at multiple stage,
-        must be divider of the maximum value
+        must be divider of the maximum value, (2, 4, 8, 16 ...)
     metric : str
         Metric / Distance given in the "Lpq" string form
         (L1: manhattan, L2: euclidean, L21 + both_dir: MDF)
