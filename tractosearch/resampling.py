@@ -308,3 +308,67 @@ def meanpts_sline(sline, nb_mpts: int = 0, mpts_length: float = 0.0):
             next_id += 1
 
     return meanpts
+
+
+def streamlines_to_points(slines):
+    """Extract all points from a list of streamlines
+
+    Parameters
+    ----------
+    slines : list of numpy.ndarray
+        List of streamlines.
+
+    Returns
+    -------
+    points : numpy.ndarray (2D)
+        Points array.
+    """
+    return np.vstack(slines)
+
+
+def streamlines_to_segments(slines):
+    """Split streamlines into its segments.
+
+    Parameters
+    ----------
+    slines : list of numpy.ndarray
+        List of streamlines.
+
+    Returns
+    -------
+    segments : numpy.ndarray (2D)
+        Segments array representation with the first and last points.
+    """
+    vts_0_list = []
+    vts_1_list = []
+    for sline_i in slines:
+        if len(sline_i) == 1:
+            vts_0_list.append(sline_i[0])
+            vts_0_list.append(sline_i[0])
+        vts_0_list.append(sline_i[:-1])
+        vts_1_list.append(sline_i[1:])
+
+    segments = np.stack((np.vstack(vts_0_list), np.vstack(vts_1_list)), axis=1)
+    return segments
+
+
+def streamlines_to_endpoints(slines):
+    """ Extract starting [:,0] and ending [:,1] points for each streamlines.
+
+    Parameters
+    ----------
+    slines : list of numpy.ndarray
+        List of streamlines.
+
+    Returns
+    -------
+    endpoints : numpy.ndarray (2D)
+        Endpoint array representation with the first and last points.
+    """
+    nb_slines = len(slines)
+
+    endpoints = np.zeros((nb_slines, 2, 3))
+    for i, streamline in enumerate(slines):
+        endpoints[i, 0] = streamline[0]
+        endpoints[i, 1] = streamline[-1]
+    return endpoints
