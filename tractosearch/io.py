@@ -12,7 +12,7 @@ from tractosearch.resampling import resample_slines_to_array
 SUPPORTED_FORMAT = ['trk', 'tck', 'vtk', 'vtp', 'fib', 'dpy', 'npy']
 
 
-def load_slines(sline_file, nii_file=None, subsample=None, resample=None, resample_mpts=False):
+def load_slines(sline_file, nii_file=None, subsample=None, resample=None, meanpts_resampling=False):
     """
     Load streamlines from a file
 
@@ -26,7 +26,7 @@ def load_slines(sline_file, nii_file=None, subsample=None, resample=None, resamp
         Subsample the number of streamlines
     resample : integer
         Resample each streamline with this number of points
-    resample_mpts : bool
+    meanpts_resampling : bool
         Resample streamlines using mean-points method
 
     Returns
@@ -56,7 +56,7 @@ def load_slines(sline_file, nii_file=None, subsample=None, resample=None, resamp
         slines = slines[::subsample]
 
     if resample:
-        slines = resample_slines_to_array(slines, resample, use_meanpts=resample_mpts)
+        slines = resample_slines_to_array(slines, resample, meanpts_resampling=meanpts_resampling)
     return slines
 
 

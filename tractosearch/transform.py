@@ -31,11 +31,14 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), metric="l21", both_dir=Tru
         reverse neighbors are returned with negative distance values
         (when streamline orientation is not relevant, such that A-B-C = C-B-A)
     scale : bool
-        Estimate a
+        Estimate a scale
     max_iter : integer
         Maximum number of iteration at each stage
     nb_cpu : integer
         Number of processor cores (multithreading)
+    search_dtype : Numpy float data type
+        Numpy data type (np.float32 or np.float64),
+        for the internal tree representation and search precision
 
     Returns
     -------

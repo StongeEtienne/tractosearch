@@ -104,7 +104,7 @@ def main():
 
         # Resample streamlines
         slines_ref = resample_slines_to_array(sft_ref.streamlines, args.resample,
-                                              use_meanpts=True, out_dtype=np.float32)
+                                              meanpts_resampling=True, out_dtype=np.float32)
 
         if not args.no_flip:
             # Duplicate all streamlines in opposite orientation
@@ -123,7 +123,7 @@ def main():
     sft.to_rasmm()
 
     # Resample input streamlines
-    slines_arr = resample_slines_to_array(sft.streamlines, args.resample, use_meanpts=True, out_dtype=np.float32)
+    slines_arr = resample_slines_to_array(sft.streamlines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
 
     # Generate the L21 k-d tree with LpqTree
     nn = lpqtree.KDTree(metric=sline_metric, n_neighbors=1)

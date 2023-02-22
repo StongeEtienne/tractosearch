@@ -109,7 +109,7 @@ def main():
     sft.to_rasmm()
 
     # Resample streamlines
-    slines_arr = resample_slines_to_array(sft.streamlines, args.resample, use_meanpts=True, out_dtype=np.float32)
+    slines_arr = resample_slines_to_array(sft.streamlines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
     slines_l21_mpts = aggregate_meanpts(slines_arr, args.nb_mpts)
 
     # Generate the L21 k-d tree with LpqTree
@@ -137,7 +137,7 @@ def main():
 
         # Resample streamlines
         slines_ref = resample_slines_to_array(sft_ref.streamlines, args.resample,
-                                              use_meanpts=True, out_dtype=np.float32)
+                                              meanpts_resampling=True, out_dtype=np.float32)
         slines_ref_mpts = aggregate_meanpts(slines_ref, args.nb_mpts)
 
         if not args.no_flip:
