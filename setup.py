@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 
-__version__ = '0.0.1a3'
+__version__ = '0.0.1a4'
 
 INSTALL_REQUIRES = ["numpy>=1.16.2",
                     "scipy>=1.0",
@@ -18,7 +18,8 @@ TESTS_REQUIRE = ['pytest',
                  'pytest-cov']
 
 # Extra requirements, add a keyword 'all' with all extra dependencies
-EXTRAS_REQUIRE = {'numba': ['numba>=0.53']}
+EXTRAS_REQUIRE = {'numba': ['numba>=0.53'],
+                  'fury': ['fury>=0.6']}
 EXTRAS_REQUIRE['all'] = list(itertools.chain.from_iterable(EXTRAS_REQUIRE.values()))
 
 
