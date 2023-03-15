@@ -6,6 +6,7 @@ from scipy.sparse import csc_matrix
 from tractosearch.resampling import resample_slines_to_array
 from lpqtree.lpqpydist import l21
 
+
 def mpt_binning(slines, bin_size=8.0, min_corner=None, max_corner=None):
     """
     Compute the mean-point binning index for each streamlines
