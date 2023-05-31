@@ -1,16 +1,19 @@
 # Etienne St-Onge
 
 import numpy as np
-
 import lpqtree
+from dipy.align.streamlinear import compose_matrix44, decompose_matrix44
 
 from tractosearch.resampling import aggregate_meanpts, resample_slines_to_array
+from tractosearch.binning import simplify
 
 
-def register(slines, slines_ref, list_mpts=(2, 4, 8), metric="l21", both_dir=True,
-             scale=True, max_iter=200, nb_cpu=4, search_dtype=np.float32):
+def register(slines, slines_ref, list_mpts=(2, 4, 8), metric="l21", scale=True, both_dir=True,
+             simplify_slines=True, simplify_bin=4.0, simplify_threshold=None,
+             max_iter_per_mpts=200, max_non_descending_iter=5, nb_cpu=4, search_dtype=np.float32):
     """
-    Register streamlines using an Iterative Closest Point approach,
+    Register two streamlines group, often referred as tractogram),
+    using an Iterative Closest Point approach
     adapted for streamlines with mean-points representations.
 
     Parameters
@@ -32,8 +35,8 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), metric="l21", both_dir=Tru
         (when streamline orientation is not relevant, such that A-B-C = C-B-A)
     scale : bool
         Estimate a scale
-    max_iter : integer
-        Maximum number of iteration at each stage
+    max_iter_per_mpts : integer
+        Maximum number of iteration at each stage (mpts resolution)
     nb_cpu : integer
         Number of processor cores (multithreading)
     search_dtype : Numpy float data type
@@ -52,10 +55,12 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), metric="l21", both_dir=Tru
     .. [StOnge2022] St-Onge E. et al. Fast Streamline Search:
             An Exact Technique for Diffusion MRI Tractography.
             Neuroinformatics, 2022.
+    .. [Sahillioglu2021] Sahillioglu Y. and Kavan L., Scale-Adaptive ICP,
+            Graphical Models, 116, p.101113., 2021.
     """
+    # Initialize
     dim = 3
     epsilon = search_dtype(1.0e-6)
-    last_err = search_dtype(9.9e48)
 
     list_mpts = np.sort(list_mpts)
     max_mpts = np.max(list_mpts)
@@ -63,53 +68,102 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), metric="l21", both_dir=Tru
     slines_m = resample_slines_to_array(slines, max_mpts, out_dtype=search_dtype)
     slines_r = resample_slines_to_array(slines_ref, max_mpts, out_dtype=search_dtype)
 
-    rotation = np.eye(dim, dtype=search_dtype)
-    translation = np.zeros(dim, dtype=search_dtype)
-    scaling = search_dtype(1.0)
+    if simplify_slines:
+        slines_m, count_m = simplify(slines_m, bin_size=simplify_bin, nb_mpts=max_mpts, method="median", return_count=True)
+        slines_r, count_r = simplify(slines_r, bin_size=simplify_bin, nb_mpts=max_mpts, method="median", return_count=True)
 
-    centroid_mov = np.mean(slines_m.reshape((-1, dim)), axis=0)
+        if simplify_threshold:
+            mask_m = count_m >= simplify_threshold
+            mask_r = count_r >= simplify_threshold
+            slines_m = slines_m[mask_m]
+            slines_r = slines_r[mask_r]
+            # count_m = count_m[mask_m]
+            # count_r = count_r[mask_r]
+
+    min_rotation = np.eye(dim, dtype=search_dtype)
+    min_translation = np.zeros(dim, dtype=search_dtype)
+    min_scaling = search_dtype(1.0)
+
+    knn_res = None
+    knn_res2 = None
+    last_err = search_dtype(9.9e48)
+    min_err = search_dtype(9.9e48)
+
+    compute_scale = False
 
     for c_mpts in list_mpts:
+        if c_mpts == max_mpts and scale:
+            compute_scale = True
+
         # Compute mean-points
         mpts_mov = aggregate_meanpts(slines_m, c_mpts)
-        centered_mov = mpts_mov - centroid_mov
+        mpts_refa = aggregate_meanpts(slines_r, c_mpts)
 
-        mpts_ref = aggregate_meanpts(slines_r, c_mpts)
-        if both_dir:
-            mpts_ref = np.concatenate([mpts_ref, np.flip(mpts_ref, axis=1)])
+        mpts_ref = np.concatenate([mpts_refa, np.flip(mpts_refa, axis=1)])
+        mpts_mov_both = np.concatenate([mpts_mov, np.flip(mpts_mov, axis=1)])
 
-        # Generate kd-tree with current reference mean-points
+        # Generate tree with current mean-points
         nn = lpqtree.KDTree(metric=metric, n_neighbors=1)
         nn.fit(mpts_ref)
 
         # Temporary copy of the current transformed mean points
-        mpts_temp = np.dot(mpts_mov, rotation.T) * scaling + translation
+        mpts_temp = apply_transform(mpts_mov, min_rotation, min_translation, min_scaling)
+        prev_rot = min_rotation
+        prev_t = min_translation
+        prev_s = min_scaling
 
-        for i in range(max_iter):
-            # Find the nearest reference streamline, for each moving streamline
+        # Compute previous transform error with new mean-points
+        if knn_res is not None:
+            dists = lpqtree.lpqpydist.l21(mpts_ref[knn_res] - mpts_temp)
+            dists2 = lpqtree.lpqpydist.l21(mpts_mov_both[knn_res2] - mpts_refa)
+            last_err = (np.mean(dists) + np.mean(dists2)) / c_mpts
+            min_err = last_err
+
+        nb_non_descending_iter = 0
+        for i in range(max_iter_per_mpts):
             knn_res, dists = nn.query(mpts_temp, 1, return_distance=True, n_jobs=nb_cpu)
-            ref_match = mpts_ref[np.squeeze(knn_res)]
+            knn_res = np.squeeze(knn_res)
+            dists = np.squeeze(dists)
+            ref_match = mpts_ref[knn_res]
 
-            # Estimate the transformation, using those matched points
-            c_rot, c_t, c_s = estimate_transfo_precomp(mpts_mov.reshape((-1, dim)),
-                                                       ref_match.reshape((-1, dim)),
-                                                       centered_mov.reshape((-1, dim)),
-                                                       centroid_mov,
-                                                       estimate_scale=scale)
+            nn2 = lpqtree.KDTree(metric=metric, n_neighbors=1)
+            nn2.fit(np.concatenate([mpts_temp, np.flip(mpts_temp, axis=1)]))
+            knn_res2, dists2 = nn2.query(mpts_refa, 1, return_distance=True, n_jobs=nb_cpu)
+            knn_res2 = np.squeeze(knn_res2)
+            mov_match = mpts_mov_both[knn_res2]
 
-            curr_err = np.mean(np.squeeze(dists)) / c_mpts
+            prev_err = (np.mean(dists) + np.mean(dists2)) / c_mpts
 
-            if curr_err + epsilon < last_err:
-                last_err = curr_err
-                rotation = c_rot
-                translation = c_t
-                scaling = c_s
-                mpts_temp = np.dot(mpts_mov, c_rot.T) * c_s + c_t
+            if prev_err + epsilon < last_err:
+                if prev_err < min_err:
+                    min_err = prev_err
+                    min_rotation = prev_rot
+                    min_translation = prev_t
+                    min_scaling = prev_s
+                    print(f"min {c_mpts} mpts, iter {i}, val {prev_err}")
+
+                last_err = prev_err
+                print(f"last {c_mpts} mpts, iter {i}, val {prev_err}")
+                nb_non_descending_iter = 0
             else:
+                nb_non_descending_iter += 1
+
+            if nb_non_descending_iter >= max_non_descending_iter:
+                print(f"break {c_mpts} mpts, iter {i}, val {prev_err}, after {nb_non_descending_iter} non-desc iter")
                 last_err = search_dtype(9.9e48)
                 break
 
-    return rotation, translation, scaling
+            next_rot, next_t, next_s = estimate_transfo(
+                np.concatenate([mpts_mov.reshape((-1, 3)), mov_match.reshape((-1, 3))]),
+                np.concatenate([ref_match.reshape((-1, 3)), mpts_refa.reshape((-1, 3))]),
+                estimate_scale=compute_scale)
+
+            mpts_temp = apply_transform(mpts_mov, next_rot, next_t, next_s)
+            prev_rot = next_rot
+            prev_t = next_t
+            prev_s = next_s
+
+    return min_rotation, min_translation, min_scaling
 
 
 def apply_transform(pts, rotation=np.eye(3), translation=np.zeros(3), scaling=1.0):
@@ -151,20 +205,11 @@ def estimate_transfo(pts_mov, pts_ref, estimate_scale=True):
     .. [Sahillioglu2021] Sahillioglu Y. and Kavan L., Scale-Adaptive ICP,
             Graphical Models, 116, p.101113., 2021.
     """
+    centroid_ref = np.mean(pts_ref, axis=0)
+    centered_ref = pts_ref - centroid_ref
 
     centroid_mov = np.mean(pts_mov, axis=0)
     centered_mov = pts_mov - centroid_mov
-    return estimate_transfo_precomp(pts_mov, pts_ref, centered_mov, centroid_mov, estimate_scale=estimate_scale)
-
-
-def estimate_transfo_precomp(pts_mov, pts_ref, centered_mov, centroid_mov, estimate_scale=True):
-    """
-    Estimate transformation using precomputed array,
-    for centered moving points (centered_mov) and centroid (centroid_mov)
-    to avoid repetitive computation.
-    """
-    centroid_ref = np.mean(pts_ref, axis=0)
-    centered_ref = pts_ref - centroid_ref
 
     # estimate rotation
     cov = np.dot(centered_mov.T, centered_ref)
@@ -204,3 +249,16 @@ def estimate_transfo_precomp(pts_mov, pts_ref, centered_mov, centroid_mov, estim
     # estimate translation
     t = centroid_ref - centroid_mov_rot
     return rot, t, 1.0
+
+
+def objective_two_side(self, opt_param, knn=1):
+    aff = compose_matrix44(opt_param)
+    slines_mov = (np.dot(self._a, aff[:3, :3].T) + aff[:3, 3])
+    slines_ref = self._b
+
+    _, dists1 = self._b_tree.query(slines_mov, knn, return_distance=True, n_jobs=self.nb_cpu)
+
+    nn = lpqtree.KDTree(metric="l21")
+    nn.fit(np.concatenate([slines_mov, np.flip(slines_mov, axis=1)]))
+    _, dists2 = nn.query(slines_ref, knn, return_distance=True, n_jobs=self.nb_cpu)
+    return np.mean(dists1) + np.mean(dists2)

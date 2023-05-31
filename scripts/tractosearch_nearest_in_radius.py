@@ -11,6 +11,7 @@ import lpqtree
 from dipy.io.streamline import load_tractogram, save_tractogram
 
 from tractosearch.resampling import resample_slines_to_array, aggregate_meanpts
+from tractosearch.transform import apply_transform
 from tractosearch.util import nearest_from_matrix_col, split_unique_indices
 
 
@@ -79,6 +80,10 @@ def _build_arg_parser():
     p.add_argument('--ref_nii', default=None,
                    help='reference anatomy (nifti), for non ".trk" tractogram')
 
+    group = p.add_mutually_exclusive_group()
+    group.add_argument('--transform', help='Apply affine transform to in_tractogram (.txt or .npy)')
+    group.add_argument('--inv_tranform', help='Apply the inverse affine transform to in_tractogram (.txt or .npy)')
+
     p.add_argument('--output_format', default="trk",
                    help='Output tractogram format, [%(default)s]')
 
@@ -112,6 +117,15 @@ def main():
 
     # Resample streamlines
     slines_arr = resample_slines_to_array(sft.streamlines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
+
+    if args.transform:
+        trfo = np.loadtxt(args.transform)
+        slines_arr = apply_transform(slines_arr, trfo[:3, :3], trfo[0:3, 3])
+    elif args.inv_tranform:
+        trfo = np.invert(np.loadtxt(args.transform))
+        slines_arr = apply_transform(slines_arr, trfo[:3, :3], trfo[0:3, 3])
+
+    # Compute mean-points
     slines_l21_mpts = aggregate_meanpts(slines_arr, args.nb_mpts)
 
     # Generate the L21 k-d tree with LpqTree

@@ -255,7 +255,7 @@ def simplify(slines, bin_size=8.0, binning_nb=2, method="median", nb_mpts=16, re
         dist_to_mean = l21(slines_mpts - avg_bin[inv])
         max_dist = dist_to_mean.max() * 1.1
 
-        # Compute the closest to mean "median"
+        # Compute the closest to "median" (closest to mean)
         mtx = csc_matrix((max_dist - dist_to_mean, (inv, np.arange(len(slines_mpts)))), shape=(len(u), len(slines_mpts)))
         median_id = np.squeeze(np.asarray(mtx.argmax(axis=1)))
 
