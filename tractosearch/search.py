@@ -20,12 +20,12 @@ def knn_search(slines, slines_ref, k=1, metric="l21", both_dir=True, resample=24
         Streamlines with resampled array representation
     slines_ref : list of numpy array (nb_slines_ref x nb_pts x d)
         Reference streamlines with resampled array representation
-        if None is given, it assume the search is run on "slines" itself
+        if None is given, it assumes the search is run on "slines" itself
     k : int
         Number of nearest neighbors wanted per slines
     metric : str
         Metric / Distance given in the "Lpq" string form
-        (L1: manhattan, L2: euclidean, L21 + both_dir: MDF)
+        (L1: Manhattan, L2: Euclidean, L21 + both_dir: MDF)
     both_dir : bool
         Compute distance in both normal and reversed order,
         reverse neighbors are returned with negative distance values
@@ -80,12 +80,12 @@ def radius_search(slines, slines_ref, radius, metric="l21", both_dir=True, resam
         Streamlines with resampled array representation
     slines_ref : list of numpy array (nb_slines_ref x nb_pts x d)
         Reference streamlines with resampled array representation
-        if None is given, it assume the search is run on "slines" itself
+        if None is given, it assumes the search is run on "slines" itself
     radius : float
         Radius of the search, the threshold distance for the adjacency
     metric : str
         Metric / Distance given in the "Lpq" string form
-        (L1: manhattan, L2: euclidean, L21 + both_dir: MDF)
+        (L1: Manhattan, L2: Euclidean, L21 + both_dir: MDF)
     both_dir : bool
         Compute distance in both normal and reversed order,
         reverse neighbors are returned with negative distance values

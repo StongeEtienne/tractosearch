@@ -45,10 +45,12 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), metric="l21", scale=True, 
 
     Returns
     -------
-    ids_ref : numpy array (nb_slines x k)
-        Reference indices of the k-nearest neighbors of each slines
-    dists : numpy array (nb_slines x k)
-        Distances for all k-nearest neighbors
+    rotation : numpy array (3 x 3)
+        rotation from the transformation result
+    translation : numpy array (3)
+        translation from the transformation result
+    scale : numpy array (3)
+        scale from the transformation result
 
     References
     ----------
@@ -99,8 +101,9 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), metric="l21", scale=True, 
         mpts_mov = aggregate_meanpts(slines_m, c_mpts)
         mpts_refa = aggregate_meanpts(slines_r, c_mpts)
 
-        mpts_ref = np.concatenate([mpts_refa, np.flip(mpts_refa, axis=1)])
-        mpts_mov_both = np.concatenate([mpts_mov, np.flip(mpts_mov, axis=1)])
+        if both_dir:
+            mpts_mov_both = np.concatenate([mpts_mov, np.flip(mpts_mov, axis=1)])
+            mpts_ref = np.concatenate([mpts_refa, np.flip(mpts_refa, axis=1)])
 
         # Generate tree with current mean-points
         nn = lpqtree.KDTree(metric=metric, n_neighbors=1)
@@ -127,7 +130,12 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), metric="l21", scale=True, 
             ref_match = mpts_ref[knn_res]
 
             nn2 = lpqtree.KDTree(metric=metric, n_neighbors=1)
-            nn2.fit(np.concatenate([mpts_temp, np.flip(mpts_temp, axis=1)]))
+
+            if both_dir:
+                nn2.fit(np.concatenate([mpts_temp, np.flip(mpts_temp, axis=1)]))
+            else:
+                nn2.fit(mpts_temp)
+
             knn_res2, dists2 = nn2.query(mpts_refa, 1, return_distance=True, n_jobs=nb_cpu)
             knn_res2 = np.squeeze(knn_res2)
             mov_match = mpts_mov_both[knn_res2]

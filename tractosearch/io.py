@@ -12,22 +12,18 @@ from tractosearch.resampling import resample_slines_to_array
 SUPPORTED_FORMAT = ['trk', 'tck', 'vtk', 'vtp', 'fib', 'dpy', 'npy']
 
 
-def load_slines(sline_file, nii_file=None, subsample=None, resample=None, meanpts_resampling=False):
+def load_slines(sline_file, ref_file=None, subsample=None):
     """
-    Load streamlines from a file
+    Load streamlines from a file to RASMM space
 
     Parameters
     ----------
     sline_file : str
         Streamlines file
-    nii_file : str
+    ref_file : str
         Nifti file (anatomical image)
     subsample : int
         Subsample the number of streamlines
-    resample : integer
-        Resample each streamline with this number of points
-    meanpts_resampling : bool
-        Resample streamlines using mean-points method
 
     Returns
     -------
@@ -42,25 +38,22 @@ def load_slines(sline_file, nii_file=None, subsample=None, resample=None, meanpt
     if file_ext == "npy":
         slines = np.load(sline_file)
     else:
-        if file_ext == "trk" and not nii_file:
+        if file_ext == "trk" and not ref_file:
             # ".trk" can be loaded without ref
-            sft = load_tractogram(sline_file, "same")
+            sft = load_tractogram(sline_file, "same", to_space=Space.RASMM)
         else:
-            if not nii_file:
+            if not ref_file:
                 raise IOError(f"'.{file_ext}' requires nifti file header")
-            sft = load_tractogram(sline_file, nii_file)
-        sft.to_rasmm()
+            sft = load_tractogram(sline_file, ref_file, to_space=Space.RASMM)
         slines = list(sft.streamlines)
 
     if subsample:
         slines = slines[::subsample]
 
-    if resample:
-        slines = resample_slines_to_array(slines, resample, meanpts_resampling=meanpts_resampling)
     return slines
 
 
-def save_slines(filename, slines, nii_file=None):
+def save_slines(filename, slines, ref_file=None):
     """
     Load streamlines from a file
 
@@ -79,10 +72,10 @@ def save_slines(filename, slines, nii_file=None):
     if file_ext == "npy":
         np.save(filename, slines)
     else:
-        if not nii_file:
+        if not ref_file:
             raise IOError(f"'.{file_ext}' requires nifti file header,\n"
                           f" this can be a '.nii' or '.trk' file")
-        sft = StatefulTractogram(slines, nii_file, space=Space.RASMM)
+        sft = StatefulTractogram(slines, ref_file, space=Space.RASMM)
         save_tractogram(sft, filename)
 
 

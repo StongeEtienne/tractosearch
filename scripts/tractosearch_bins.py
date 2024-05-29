@@ -6,31 +6,24 @@ import argparse
 import os
 
 import numpy as np
-import lpqtree
 
 from tractosearch.io import load_slines, save_slines
-from tractosearch.resampling import resample_slines_to_array, aggregate_meanpts
+from tractosearch.resampling import resample_slines_to_array
+from tractosearch.search import radius_search
+from tractosearch.group import connected_components_indices, connected_components_split, group_to_centroid
 
 
 DESCRIPTION = """
     [StOnge2022] Fast Tractography Streamline Search.
-    For each streamlines in the input "in_tractogram",
-    find all "ref_tractograms" within a maximum radius.
-
-    Nifti image is required as reference header (--in_nii, --ref_nii) 
-    if the "in_tractogram" or "ref_tractograms" are not in ".trk" format
-
-    The radius "mean_distance", is the average point-wise distance 
-    between two streamlines (similar to MDF). See [StOnge2022] for details.
-
-    The mapping info can be save (in .npy format) using "--save_mapping".
-    For each output file, it will also return a list of streamlines indices.
-    These are the streamline indices from the initial "in_tractogram".
+    Group similar streamlines into "square" bins.
+    
+    The grouping distance is based on the average point-wise distance 
+    between two streamlines from mean-points (similar to MDF). 
+    See [StOnge2022] for details.
 
     Example:
-        tractosearch_all_in_radius.py sub01_prob_tracking.trk \\
-          recobundle_atlas/AF_L.trk recobundle_atlas/AF_R.trk \\
-          4.0 AF_seg_result/
+        tractosearch_register.py sub01_track.trk recobundle_atlas/all.trk \\
+            result_matrix.txt --out_tractogram sub01_track__in_ref_space.trk 
     """
 
 EPILOG = """
@@ -48,15 +41,15 @@ def _build_arg_parser():
     p.add_argument('in_tractogram',
                    help='Streamlines to search or to cluster')
 
-    p.add_argument('ref_tractograms', nargs='+',
-                   help='Reference streamlines for the search')
-
     p.add_argument('mean_distance', type=float,
                    help='Streamlines maximum distance in mm, based on the \n'
                         'mean point-wise euclidean distance (MDF)')
 
     p.add_argument('out_folder',
                    help='Output streamlines folder')
+
+    p.add_argument('--min_cluster', type=int, default=2,
+                   help='Minimum number of streamlines in a cluster [%(default)s]')
 
     p.add_argument('--resample', type=int, default=32,
                    help='Resample the number of mean-points in streamlines, [%(default)s] \n'
@@ -72,9 +65,6 @@ def _build_arg_parser():
 
     p.add_argument('--in_nii', default=None,
                    help='Input anatomy (nifti), for non ".trk" tractogram')
-
-    p.add_argument('--ref_nii', default=None,
-                   help='reference anatomy (nifti), for non ".trk" tractogram')
 
     p.add_argument('--output_format', default="trk",
                    help='Output tractogram format, [%(default)s]')
@@ -100,60 +90,62 @@ def main():
     else:
         assert ".trk" in args.in_tractogram, "Non-'.trk' files requires a Nifti file ('--in_nii')"
 
+    use_both_dir = True
+    if args.no_flip:
+        use_both_dir = False
+
     # Load input Tractogram
     slines = load_slines(args.in_tractogram, input_header)
 
-    # Resample input streamlines
+    # Resample streamlines
     slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
-    slines_l21_mpts = aggregate_meanpts(slines_arr, args.nb_mpts)
+    # slines_l21_mpts = aggregate_meanpts(slines_arr, args.nb_mpts)
 
     # Generate the L21 k-d tree with LpqTree
     l21_radius = args.mean_distance * args.resample
-    nn = lpqtree.KDTree(metric=sline_metric, radius=l21_radius)
-    nn.fit(slines_l21_mpts)
+    dist_mtx = radius_search(slines_arr, None, radius=l21_radius, metric=sline_metric, both_dir=use_both_dir,
+                             resample=args.resample, lp1_mpts=args.nb_mpts, nb_cpu=args.cpu, search_dtype=np.float32)
+
+    # Group connected components
+    dist_mtx.data = np.abs(dist_mtx.data)
+    dist_mtx = dist_mtx.tocsr()
+    list_of_indices = connected_components_indices(dist_mtx)
+    list_of_mtx = connected_components_split(dist_mtx, list_of_indices)
 
     # Generate output directory
     if not os.path.exists(args.out_folder):
         os.makedirs(args.out_folder)
 
-    # Search in each given reference tractogram
-    for ref_tractogram in args.ref_tractograms:
-
-        ref_header = ref_tractogram
-        if args.ref_nii:
-            ref_header = args.ref_nii
-        else:
-            assert ".trk" in ref_tractogram, "Non-'.trk' files requires a Nifti file ('--ref_nii')"
-
-        # Load reference tractogram
-        slines_ref = load_slines(ref_tractogram, ref_header)
-
-        # Resample streamlines
-        slines_ref = resample_slines_to_array(slines_ref, args.resample, meanpts_resampling=True, out_dtype=np.float32)
-        slines_ref_mpts = aggregate_meanpts(slines_ref, args.nb_mpts)
-
-        if not args.no_flip:
-            # Duplicate all streamlines in opposite orientation
-            slines_ref = np.concatenate([slines_ref, np.flip(slines_ref, axis=1)])
-            slines_ref_mpts = np.concatenate([slines_ref_mpts, np.flip(slines_ref_mpts, axis=1)])
-
-        # Fast Streamline Search
-        nn.radius_neighbors_full(slines_ref_mpts, slines_arr, slines_ref, l21_radius, n_jobs=args.cpu)
-
-        # Generate output name
-        ref_str = os.path.basename(ref_tractogram).split('.')[0]
-        dist_str = f"tractosearch_{str(args.mean_distance).replace('.', '_')}mm"
-        output_name = f"{args.out_folder}/{dist_str}_{ref_str}.{args.output_format}"
-
-        # Compute all indices, and remove duplicate
-        sline_ids = np.unique(nn.get_cols())
+    un_clustered = []
+    slines_cent = []
+    out_tag = 0
+    prefix = f"{args.out_folder}/tractosearch_hdbscan"
+    for slines_ids, mtx in zip(list_of_indices, list_of_mtx):
+        if len(slines_ids) < args.min_cluster:
+            un_clustered.append(slines_ids)
+            continue
 
         # Save streamlines
-        save_slines(output_name, np.asarray(slines)[sline_ids], ref_file=input_header)
+        center = group_to_centroid(slines_arr[slines_ids], mtx, return_cov=False)
+        slines_cent.append(center)
 
         if args.save_mapping:
-            output_npy = f"{args.out_folder}/{dist_str}_{ref_str}.npy"
-            np.save(output_npy, sline_ids)
+            output_npy = f"{prefix}__{out_tag}.npy"
+            np.save(output_npy, slines_ids)
+
+        out_tag += 1
+
+    # Save streamlines
+    save_slines(f"{prefix}__centroids.{args.output_format}", slines_cent, ref_file=input_header)
+
+    # Save un-clustered streamlines together
+    if len(un_clustered) > 0:
+        slines_ids = np.concatenate(un_clustered)
+        save_slines(f"{prefix}__unclustered.{args.output_format}", np.asarray(slines)[slines_ids], ref_file=input_header)
+
+        if args.save_mapping:
+            output_npy = f"{prefix}__unclustered.npy"
+            np.save(output_npy, slines_ids)
 
 
 if __name__ == '__main__':

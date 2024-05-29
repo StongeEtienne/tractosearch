@@ -8,8 +8,7 @@ import os
 import numpy as np
 import lpqtree
 
-from dipy.io.streamline import load_tractogram, save_tractogram
-
+from tractosearch.io import load_slines, save_slines
 from tractosearch.resampling import resample_slines_to_array, aggregate_meanpts
 from tractosearch.transform import apply_transform
 from tractosearch.util import nearest_from_matrix_col, split_unique_indices
@@ -112,11 +111,12 @@ def main():
         assert ".trk" in args.in_tractogram, "Non-'.trk' files requires a Nifti file ('--in_nii')"
 
     # Load input Tractogram
-    sft = load_tractogram(args.in_tractogram, input_header)
-    sft.to_rasmm()
+    # sft = load_tractogram(args.in_tractogram, input_header, to_space=Space.RASMM)
+    slines = load_slines(args.in_tractogram, input_header)
 
     # Resample streamlines
-    slines_arr = resample_slines_to_array(sft.streamlines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
+    slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
+    # slines_l21_mpts = aggregate_meanpts(slines_arr, args.nb_mpts)
 
     if args.transform:
         trfo = np.loadtxt(args.transform)
@@ -150,19 +150,17 @@ def main():
             assert ".trk" in ref_tractogram, "Non-'.trk' files requires a Nifti file ('--ref_nii')"
 
         # Load reference tractogram
-        sft_ref = load_tractogram(ref_tractogram, ref_header)
-        sft_ref.to_rasmm()
+        # sft_ref = load_tractogram(ref_tractogram, ref_header, to_space=Space.RASMM)
+        slines_ref = load_slines(ref_tractogram, ref_header)
 
         # Resample streamlines
-        slines_ref = resample_slines_to_array(sft_ref.streamlines, args.resample,
-                                              meanpts_resampling=True, out_dtype=np.float32)
+        slines_ref = resample_slines_to_array(slines_ref, args.resample, meanpts_resampling=True, out_dtype=np.float32)
         slines_ref_mpts = aggregate_meanpts(slines_ref, args.nb_mpts)
 
         if not args.no_flip:
             # Duplicate all streamlines in opposite orientation
             slines_ref = np.concatenate([slines_ref, np.flip(slines_ref, axis=1)])
             slines_ref_mpts = np.concatenate([slines_ref_mpts, np.flip(slines_ref_mpts, axis=1)])
-        del sft_ref
 
         # Fast Streamline Search
         nn.radius_neighbors_full(slines_ref_mpts, slines_arr, slines_ref, l21_radius, n_jobs=args.cpu)
@@ -205,7 +203,7 @@ def main():
 
         # Save streamlines
         sline_ids = list_sline_ids[i]
-        save_tractogram(sft[sline_ids], output_name)
+        save_slines(output_name, slines[sline_ids], ref_file=ref_header)
 
         if args.save_mapping:
             output_npy = f"{args.out_folder}/{dist_str}_{ref_str}.npy"

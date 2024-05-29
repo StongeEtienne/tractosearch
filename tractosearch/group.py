@@ -44,8 +44,9 @@ def group_to_centroid(slines_arr, dist_mtx, return_cov=False):
     ----------
     slines_arr : numpy array (nb_slines x nb_pts x d)
         Streamlines with resampled array representation
-    dist_mtx : float
-        Radius of the search, to initially estimate the center
+    dist_mtx : scipy COOrdinates sparse matrix (nb_slines x nb_slines_ref)
+        Adjacency matrix containing all neighbors within the given radius
+        if both_dir, negative values are returned for reversed order neighbors
     return_cov : bool
         Compute the covariance for each points in the centroid_line
 

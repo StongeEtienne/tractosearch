@@ -8,8 +8,7 @@ import os
 import numpy as np
 import lpqtree
 
-from dipy.io.streamline import load_tractogram, save_tractogram
-
+from tractosearch.io import load_slines, save_slines
 from tractosearch.resampling import resample_slines_to_array
 from tractosearch.util import split_unique_indices
 
@@ -103,12 +102,11 @@ def main():
             assert ".trk" in ref_tractogram, "Non-'.trk' files requires a Nifti file ('--ref_nii')"
 
         # Load reference tractogram
-        sft_ref = load_tractogram(ref_tractogram, ref_header)
-        sft_ref.to_rasmm()
+        # sft_ref = load_tractogram(ref_tractogram, ref_header, to_space=Space.RASMM)
+        slines_ref = load_slines(ref_tractogram, ref_header)
 
         # Resample streamlines
-        slines_ref = resample_slines_to_array(sft_ref.streamlines, args.resample,
-                                              meanpts_resampling=True, out_dtype=np.float32)
+        slines_ref = resample_slines_to_array(slines_ref, args.resample, meanpts_resampling=True, out_dtype=np.float32)
 
         if not args.no_flip:
             # Duplicate all streamlines in opposite orientation
@@ -116,18 +114,18 @@ def main():
 
         all_ref_slines.append(slines_ref)
         all_ref_id.append(ref_id * np.ones(len(slines_ref), dtype=int))
-        del sft_ref
 
     # Group all reference streamlines together
     all_ref_id = np.concatenate(all_ref_id, axis=0)
     all_ref_slines = np.concatenate(all_ref_slines, axis=0)
 
     # Load input Tractogram
-    sft = load_tractogram(args.in_tractogram, input_header)
-    sft.to_rasmm()
+    #sft = load_tractogram(args.in_tractogram, input_header, to_space=Space.RASMM)
+    slines = load_slines(args.in_tractogram, input_header)
 
     # Resample input streamlines
-    slines_arr = resample_slines_to_array(sft.streamlines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
+    slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
+    # slines_l21_mpts = aggregate_meanpts(slines_arr, args.nb_mpts)
 
     # Generate the L21 k-d tree with LpqTree
     nn = lpqtree.KDTree(metric=sline_metric, n_neighbors=1)
@@ -153,7 +151,7 @@ def main():
 
         # Save streamlines
         sline_ids = list_sline_ids[i]
-        save_tractogram(sft[sline_ids], output_name)
+        save_slines(output_name, slines[sline_ids], ref_file=ref_header)
 
         if args.save_mapping:
             output_npy = f"{args.out_folder}/tractosearch_nn__{ref_str}.npy"

@@ -15,11 +15,14 @@ from tractosearch.length import slines_length
 
 DESCRIPTION = """
     [StOnge2022] Fast Tractography Streamline Search.
-    Align the "in_tractogram" to the "ref_tractograms".
+    For all streamline in the input "in_tractogram" find an optimal
+    rigid or affine transform towards "ref_tractograms" streamlines.
+    This algorithm is similar to iterative closest-point (ICP) for tractogram.
 
     Example:
-        tractosearch_register.py sub01_prob_tracking.trk \\
-          recobundle_atlas/all.trk
+        tractosearch_register.py sub01_track.trk recobundle_atlas/all.trk \\
+            result_matrix.txt --out_tractogram sub01_track__in_ref_space.trk 
+          
     """
 
 EPILOG = """
@@ -91,6 +94,9 @@ def main():
     max_mpts = np.max(args.multires)
 
     header_mov = args.in_tractogram
+
+    assert not ((".npy" in args.in_tractogram) or (".npy" in args.ref_tractograms)), ".npy is not supported"
+
     if args.in_nii:
         header_mov = args.in_nii
     else:
@@ -100,7 +106,7 @@ def main():
 
     # Load input Tractogram
     sft = load_tractogram(args.in_tractogram, header_mov)
-    sft.to_rasmm()
+
     slines_l = slines_length(sft.streamlines)
     l_mask = np.logical_and(args.min_length < slines_l, slines_l < args.max_length)
     slines_mov = resample_slines_to_array(sft.streamlines[l_mask], max_mpts, meanpts_resampling=True, out_dtype=dtype)
@@ -113,11 +119,11 @@ def main():
         if args.ref_nii:
             header_ref = args.ref_nii
         else:
+            print(ref_tractogram)
             assert ".trk" in ref_tractogram, "Non-'.trk' files requires a Nifti file ('--ref_nii')"
 
         # Load reference tractogram
         sft_ref = load_tractogram(ref_tractogram, header_ref)
-        sft_ref.to_rasmm()
 
         slines_l = slines_length(sft_ref.streamlines)
         l_mask = np.logical_and(args.min_length < slines_l, slines_l < args.max_length)
@@ -129,13 +135,18 @@ def main():
     slines_ref = np.concatenate(all_ref_slines, axis=0)
     del all_ref_slines
 
-    rot, t, s = register(slines_mov, slines_ref, list_mpts=args.multires, metric=sline_metric,
-                         both_dir=(not args.no_flip), scale=True,
-                         simplify_slines=(args.simplify_bin > 0.0), simplify_bin=args.simplify_bin,
+    rot, t, s = register(slines_mov,
+                         slines_ref,
+                         list_mpts=args.multires,
+                         metric=sline_metric,
+                         scale=True,
+                         both_dir=(not args.no_flip),
+                         simplify_slines=(args.simplify_bin > 0.0),
+                         simplify_bin=args.simplify_bin,
                          simplify_threshold=args.simplify_threshold,
-                         max_iter_per_mpts=args.max_iter_per_res, nb_cpu=args.cpu, search_dtype=dtype)
-    
-    print((rot, t, s))
+                         max_iter_per_mpts=args.max_iter_per_res,
+                         nb_cpu=args.cpu,
+                         search_dtype=dtype)
 
     out_transfo = np.eye(4)
     out_transfo[0:3, 3] = t
