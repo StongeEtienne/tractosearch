@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 
-__version__ = '0.0.1a4'
+__version__ = '0.0.1a5'
 
 INSTALL_REQUIRES = ["numpy>=1.16.2",
                     "scipy>=1.0",
