@@ -125,7 +125,6 @@ def main():
 
     # Resample input streamlines
     slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
-    # slines_l21_mpts = aggregate_meanpts(slines_arr, args.nb_mpts)
 
     # Generate the L21 k-d tree with LpqTree
     nn = lpqtree.KDTree(metric=sline_metric, n_neighbors=1)
@@ -151,7 +150,7 @@ def main():
 
         # Save streamlines
         sline_ids = list_sline_ids[i]
-        save_slines(output_name, slines[sline_ids], ref_file=ref_header)
+        save_slines(output_name, slines, indices=sline_ids, ref_file=ref_header)
 
         if args.save_mapping:
             output_npy = f"{args.out_folder}/tractosearch_nn__{ref_str}.npy"

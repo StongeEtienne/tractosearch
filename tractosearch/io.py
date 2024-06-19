@@ -53,17 +53,27 @@ def load_slines(sline_file, ref_file=None, subsample=None):
     return slines
 
 
-def save_slines(filename, slines, ref_file=None):
+def save_slines(filename, slines, ref_file=None, indices=None):
     """
-    Load streamlines from a file
+    Save streamlines
 
     Parameters
     ----------
-    sline_file : str
+    filename : str
         Streamlines file
-    nii_file : str
+    slines : List of numpy array
+        Streamlines
+    ref_file : str
         Reference Nifti file (anatomical image)
+    indices : numpy array (int)
+        List of indices, of streamlines to save
     """
+    if indices is not None:
+        if isinstance(slines, np.ndarray):
+            slines = slines[indices]
+        else:
+            slines = np.asarray(slines, dtype=object)[indices]
+
     file_ext = filename.split(".")[-1].lower()
     if file_ext not in SUPPORTED_FORMAT:
         raise IOError(f"'.{file_ext}' is not supported, \n"
@@ -72,9 +82,6 @@ def save_slines(filename, slines, ref_file=None):
     if file_ext == "npy":
         np.save(filename, slines)
     else:
-        if not ref_file:
-            raise IOError(f"'.{file_ext}' requires nifti file header,\n"
-                          f" this can be a '.nii' or '.trk' file")
         sft = StatefulTractogram(slines, ref_file, space=Space.RASMM)
         save_tractogram(sft, filename)
 

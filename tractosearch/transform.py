@@ -88,8 +88,8 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), metric="l21", scale=True, 
 
     knn_res = None
     knn_res2 = None
-    last_err = search_dtype(9.9e48)
-    min_err = search_dtype(9.9e48)
+    last_err = np.finfo(search_dtype).max  # infinity - max float val
+    min_err = np.finfo(search_dtype).max  # infinity - max float val
 
     compute_scale = False
 
@@ -158,7 +158,7 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), metric="l21", scale=True, 
 
             if nb_non_descending_iter >= max_non_descending_iter:
                 print(f"break {c_mpts} mpts, iter {i}, val {prev_err}, after {nb_non_descending_iter} non-desc iter")
-                last_err = search_dtype(9.9e48)
+                last_err = np.finfo(search_dtype).max  # infinity - max float val
                 break
 
             next_rot, next_t, next_s = estimate_transfo(

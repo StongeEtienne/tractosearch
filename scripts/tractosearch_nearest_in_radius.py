@@ -80,8 +80,14 @@ def _build_arg_parser():
                    help='reference anatomy (nifti), for non ".trk" tractogram')
 
     group = p.add_mutually_exclusive_group()
-    group.add_argument('--transform', help='Apply affine transform to in_tractogram (.txt or .npy)')
-    group.add_argument('--inv_tranform', help='Apply the inverse affine transform to in_tractogram (.txt or .npy)')
+    group.add_argument('--auto_register', choices=['rigid', 'affine'],
+                       help='Automatic registration with rigid or affine ICP approach')
+
+    group.add_argument('--transform',
+                       help='Apply affine transform to in_tractogram (.txt or .npy)')
+
+    group.add_argument('--inv_tranform',
+                       help='Apply the inverse affine transform to in_tractogram (.txt or .npy)')
 
     p.add_argument('--output_format', default="trk",
                    help='Output tractogram format, [%(default)s]')
@@ -111,12 +117,10 @@ def main():
         assert ".trk" in args.in_tractogram, "Non-'.trk' files requires a Nifti file ('--in_nii')"
 
     # Load input Tractogram
-    # sft = load_tractogram(args.in_tractogram, input_header, to_space=Space.RASMM)
     slines = load_slines(args.in_tractogram, input_header)
 
     # Resample streamlines
     slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
-    # slines_l21_mpts = aggregate_meanpts(slines_arr, args.nb_mpts)
 
     if args.transform:
         trfo = np.loadtxt(args.transform)
@@ -150,7 +154,6 @@ def main():
             assert ".trk" in ref_tractogram, "Non-'.trk' files requires a Nifti file ('--ref_nii')"
 
         # Load reference tractogram
-        # sft_ref = load_tractogram(ref_tractogram, ref_header, to_space=Space.RASMM)
         slines_ref = load_slines(ref_tractogram, ref_header)
 
         # Resample streamlines
@@ -203,7 +206,7 @@ def main():
 
         # Save streamlines
         sline_ids = list_sline_ids[i]
-        save_slines(output_name, slines[sline_ids], ref_file=ref_header)
+        save_slines(output_name, slines, indices=sline_ids, ref_file=ref_header)
 
         if args.save_mapping:
             output_npy = f"{args.out_folder}/{dist_str}_{ref_str}.npy"

@@ -17,7 +17,7 @@ DESCRIPTION = """
     [StOnge2022] Fast Tractography Streamline Search.
     For all streamline in the input "in_tractogram" find an optimal
     rigid or affine transform towards "ref_tractograms" streamlines.
-    This algorithm is similar to iterative closest-point (ICP) for tractogram.
+    This algorithm is an adaptation of iterative closest-point (ICP) for tractogram.
 
     Example:
         tractosearch_register.py sub01_track.trk recobundle_atlas/all.trk \\

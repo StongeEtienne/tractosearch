@@ -204,7 +204,7 @@ def upper_triangle_idx(dim, row, col):
     return (2 * dim + 1 - row) * row//2 + col - row
 
 
-def simplify(slines, bin_size=8.0, binning_nb=2, method="median", nb_mpts=16, return_count=False):
+def simplify(slines, bin_size=8.0, binning_nb=2, method="median", nb_mpts=16, return_count=False, dtype=np.float32):
     """
     simplify a list of streamlines grouping
 
@@ -222,6 +222,9 @@ def simplify(slines, bin_size=8.0, binning_nb=2, method="median", nb_mpts=16, re
         Number of mean-points for the average / mean representation
     return_count : bool
         Return number of streamlines per group
+    dtype : float data type
+        Floating precision for the resulting points
+        float32 is suggested to reduce memory size and search computation speed
 
     Returns
     -------
@@ -229,7 +232,7 @@ def simplify(slines, bin_size=8.0, binning_nb=2, method="median", nb_mpts=16, re
         Bin id for each streamline
     """
 
-    slines_mpts = resample_slines_to_array(slines, nb_mpts)
+    slines_mpts = resample_slines_to_array(slines, nb_mpts, out_dtype=dtype)
 
     if binning_nb == 2:
         mpts_id, flips = two_mpts_binning(slines, bin_size=bin_size, return_flips=True)
@@ -242,14 +245,12 @@ def simplify(slines, bin_size=8.0, binning_nb=2, method="median", nb_mpts=16, re
 
     slines_mpts[flips] = np.flip(slines_mpts[flips], axis=1)
 
-    avg_bin = np.zeros((len(u), nb_mpts, 3), dtype=np.float32)
+    avg_bin = np.zeros((len(u), nb_mpts, 3), dtype=dtype)
     np.add.at(avg_bin, inv, slines_mpts)
     avg_bin /= count.reshape((-1, 1, 1))
 
     if method == "mean":
-        if return_count:
-            return avg_bin, count
-        return avg_bin
+        bin_centroids = avg_bin
 
     elif method == "median":
         dist_to_mean = l21(slines_mpts - avg_bin[inv])
@@ -259,9 +260,14 @@ def simplify(slines, bin_size=8.0, binning_nb=2, method="median", nb_mpts=16, re
         mtx = csc_matrix((max_dist - dist_to_mean, (inv, np.arange(len(slines_mpts)))), shape=(len(u), len(slines_mpts)))
         median_id = np.squeeze(np.asarray(mtx.argmax(axis=1)))
 
-        if return_count:
-            return slines[median_id], count
-        return slines[median_id]
+        if isinstance(slines, np.ndarray):
+            bin_centroids = slines[median_id]
+        else:
+            bin_centroids = np.asarray(slines, dtype=object)[median_id]
     else:
         raise NotImplementedError()
+
+    if return_count:
+        return bin_centroids, count
+    return bin_centroids
 

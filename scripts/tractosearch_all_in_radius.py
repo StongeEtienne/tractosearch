@@ -149,7 +149,7 @@ def main():
         sline_ids = np.unique(nn.get_cols())
 
         # Save streamlines
-        save_slines(output_name, np.asarray(slines)[sline_ids], ref_file=input_header)
+        save_slines(output_name, slines, indices=sline_ids, ref_file=input_header)
 
         if args.save_mapping:
             output_npy = f"{args.out_folder}/{dist_str}_{ref_str}.npy"
