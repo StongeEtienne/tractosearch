@@ -273,13 +273,13 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), transform_type="similarity
                 nb_non_descending_iter += 1  # flat line
 
             best_mtx = compose_matrix44(opt.xopt)
-            print(f"min  optim, iter {j}, {func_res}")
+            # print(f"min  optim, iter {j}, {func_res}")
         else:
             nb_non_descending_iter += 1
-            print(f"step optim, iter {j}, {func_res}")
+            # print(f"step optim, iter {j}, {func_res}")
 
         if nb_non_descending_iter >= max_non_descending_iter:
-            print(f"break optim, iter {j}, {func_res}, after {nb_non_descending_iter} non-desc iter")
+            # print(f"break optim, iter {j}, {func_res}, after {nb_non_descending_iter} non-desc iter")
             break
 
     return best_mtx[:3, :3], best_mtx[:3, 3]
