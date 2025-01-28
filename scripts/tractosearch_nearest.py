@@ -26,10 +26,29 @@ DESCRIPTION = """
     For each output file, it will also return a list of streamlines indices.
     These are the streamline indices from the initial "in_tractogram".
 
-    Example:
+    Example (if subject tractogram already in reference space) :
         tractosearch_nearest.py sub01_prob_tracking.trk \\
           recobundle_atlas/AF_L.trk recobundle_atlas/AF_R.trk \\
           AF_seg_result/
+          
+    With TractoSearch Register :
+        tractosearch_register.py sub01_prob_tracking.trk \\
+          recobundle_atlas/*.trk sub01RegAtlas.txt \\
+
+        tractosearch_nearest.py sub01_prob_tracking.trk \\
+          recobundle_atlas/AF_L.trk recobundle_atlas/AF_R.trk \\
+          4.0 AF_seg_result/ --transform sub01RegAtlas.txt
+          
+    With ANTs linear transform :
+        antsRegistrationSyNQuick.sh -d 3 -f mni.nii -m sub01_t1_dwi_space.nii\\
+          -o sub01_dwi2mni_
+        
+        ConvertTransformFile 3 sub01_dwi2mni_0GenericAffine.mat --hm --ras \\
+          dwi2mni_ras.txt
+
+        tractosearch_nearest.py sub01_prob_tracking.trk \\
+          recobundle_atlas/AF_L.trk recobundle_atlas/AF_R.trk \\
+          4.0 AF_seg_result/ --inv_transform dwi2mni_ras.txt
     """
 
 EPILOG = """
