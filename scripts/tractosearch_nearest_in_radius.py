@@ -98,7 +98,7 @@ def _build_arg_parser():
     gm.add_argument('--transform',
                     help='Linear (affine) transform (.txt or .npy)')
 
-    gm.add_argument('--inv_tranform',
+    gm.add_argument('--inv_transform',
                     help='Apply the inverse linear (affine) transform (.txt or .npy)')
 
     return p
@@ -125,8 +125,8 @@ def main():
     if args.transform:
         trfo = np.loadtxt(args.transform)
         slines_arr = apply_transform(slines_arr, trfo[:3, :3], trfo[0:3, 3])
-    elif args.inv_tranform:
-        trfo = np.invert(np.loadtxt(args.inv_tranform))
+    elif args.inv_transform:
+        trfo = np.linalg.inv(np.loadtxt(args.inv_transform))
         slines_arr = apply_transform(slines_arr, trfo[:3, :3], trfo[0:3, 3])
 
     # Compute mean-points
