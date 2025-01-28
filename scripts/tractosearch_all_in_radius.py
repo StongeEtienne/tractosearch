@@ -10,6 +10,7 @@ import lpqtree
 
 from tractosearch.io import load_slines, save_slines
 from tractosearch.resampling import resample_slines_to_array, aggregate_meanpts
+from tractosearch.transform import apply_transform
 
 
 DESCRIPTION = """
@@ -85,6 +86,16 @@ def _build_arg_parser():
     p.add_argument('--cpu', type=int, default=4,
                    help='Number of cpu core for the Fast Streamlines search with LpqTree, [%(default)s]')
 
+    group = p.add_argument_group('transforms',
+                                 'Apply linear transform to in_tractogram for the search,\n '
+                                 'resulting streamlines will still be in the in_tractogram space')
+    gm = group.add_mutually_exclusive_group()
+    gm.add_argument('--transform',
+                    help='Linear (affine) transform (.txt or .npy)')
+
+    gm.add_argument('--inv_tranform',
+                    help='Apply the inverse linear (affine) transform (.txt or .npy)')
+
     return p
 
 
@@ -103,8 +114,17 @@ def main():
     # Load input Tractogram
     slines = load_slines(args.in_tractogram, input_header)
 
-    # Resample input streamlines
+    # Resample streamlines
     slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
+
+    if args.transform:
+        trfo = np.loadtxt(args.transform)
+        slines_arr = apply_transform(slines_arr, trfo[:3, :3], trfo[0:3, 3])
+    elif args.inv_tranform:
+        trfo = np.invert(np.loadtxt(args.inv_tranform))
+        slines_arr = apply_transform(slines_arr, trfo[:3, :3], trfo[0:3, 3])
+
+    # Compute mean-points
     slines_l21_mpts = aggregate_meanpts(slines_arr, args.nb_mpts)
 
     # Generate the L21 k-d tree with LpqTree

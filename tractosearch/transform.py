@@ -181,14 +181,11 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), transform_type="similarity
                     nb_non_descending_iter += 1  # flat line
                 best_r_mtx = prev_r_mtx
                 best_t_vec = prev_t_vec
-                # print(f"min  {c_mpts} mpts, iter {i}, {current_err}")
 
             else:
-                # print(f"step {c_mpts} mpts, iter {i}, {current_err}")
                 nb_non_descending_iter += 1
 
             if nb_non_descending_iter >= max_non_descending_iter:
-                # print(f"break {c_mpts} mpts, iter {i}, {current_err}, after {nb_non_descending_iter} non-desc iter")
                 break
 
             next_r_mtx, next_t_vec = estimate_rigid(
@@ -228,10 +225,10 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), transform_type="similarity
     nn = lpqtree.KDTree(metric=metric)
     nn.fit(slines_r_both)
 
-    # optimization procedure
+    # Optimization procedure
     nb_non_descending_iter = 0
     for j in range(max_iter_per_mpts):
-        # current matrix transformation
+        # Current matrix transformation
         mtx = compose_matrix44(var)
 
         # Find current NN
@@ -249,7 +246,7 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), transform_type="similarity
         knn_res2, dists2 = nn2.query(mpts_ref, 1, return_distance=True, n_jobs=nb_cpu)
         a_both_ids = np.squeeze(knn_res2)
 
-        # optimization objective function (with current NN)
+        # Optimization objective function (with current NN)
         def objective_func(opt_param):
             aff = compose_matrix44(opt_param)  # .astype(search_dtype)
             a_t = (np.dot(mpts_mov, aff[:3, :3].T) + aff[:3, 3])
@@ -273,23 +270,20 @@ def register(slines, slines_ref, list_mpts=(2, 4, 8), transform_type="similarity
                 nb_non_descending_iter += 1  # flat line
 
             best_mtx = compose_matrix44(opt.xopt)
-            # print(f"min  optim, iter {j}, {func_res}")
         else:
             nb_non_descending_iter += 1
-            # print(f"step optim, iter {j}, {func_res}")
 
         if nb_non_descending_iter >= max_non_descending_iter:
-            # print(f"break optim, iter {j}, {func_res}, after {nb_non_descending_iter} non-desc iter")
             break
 
     return best_mtx[:3, :3], best_mtx[:3, 3]
 
 
-def apply_transform(pts, rotation=np.eye(3), translation=np.zeros(3)):
+def apply_transform(pts, trfo_mtx=np.eye(3), translation=np.zeros(3)):
     """
     Apply a rotation (transformation), translation
     """
-    return np.dot(pts, rotation.T) + translation
+    return np.dot(pts, trfo_mtx.T) + translation
 
 
 def estimate_rigid(pts_mov, pts_ref, estimate_scale=True):
@@ -311,10 +305,9 @@ def estimate_rigid(pts_mov, pts_ref, estimate_scale=True):
     -------
     rotation : numpy array (d x d)
         Rotation maxtrix
+        If estimate_scale is set to True, rotation matrix includes the scaling factor
     translation : numpy array (d)
         Translation vector
-    scaling : float
-        Scaling factor, if estimate_scale is set to True
 
     References
     ----------

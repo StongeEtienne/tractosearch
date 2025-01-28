@@ -139,22 +139,22 @@ def main():
     slines_ref = np.concatenate(all_ref_slines, axis=0)
     del all_ref_slines
 
-    trf_mtx, t = register(slines_mov,
-                          slines_ref,
-                          list_mpts=args.multires,
-                          metric=sline_metric,
-                          transform_type=args.transformation_type,
-                          both_dir=(not args.no_flip),
-                          simplify_slines=(args.simplify_bin > 0.0),
-                          simplify_bin=args.simplify_bin,
-                          simplify_threshold=args.simplify_threshold,
-                          max_iter_per_mpts=args.max_iter_per_res,
-                          nb_cpu=args.cpu,
-                          search_dtype=dtype)
+    trfo_mtx, t = register(slines_mov,
+                           slines_ref,
+                           list_mpts=args.multires,
+                           metric=sline_metric,
+                           transform_type=args.transformation_type,
+                           both_dir=(not args.no_flip),
+                           simplify_slines=(args.simplify_bin > 0.0),
+                           simplify_bin=args.simplify_bin,
+                           simplify_threshold=args.simplify_threshold,
+                           max_iter_per_mpts=args.max_iter_per_res,
+                           nb_cpu=args.cpu,
+                           search_dtype=dtype)
 
     out_transfo = np.eye(4)
+    out_transfo[:3, :3] = trfo_mtx
     out_transfo[0:3, 3] = t
-    out_transfo[:3, :3] = trf_mtx
 
     if ".npy" in args.out_transform:
         np.save(args.out_transform, out_transfo)
@@ -164,7 +164,7 @@ def main():
     if args.out_tractogram:
         # To avoid computation copy transformed data points directly to the ref tractogram
         sft._tractogram._streamlines._data = apply_transform(sft._tractogram._streamlines._data,
-                                                             rotation=trf_mtx,
+                                                             trfo_mtx=trfo_mtx,
                                                              translation=t)
         sft_ref._tractogram._set_streamlines(sft._tractogram._streamlines)
         save_tractogram(sft_ref, args.out_tractogram, bbox_valid_check=False)
