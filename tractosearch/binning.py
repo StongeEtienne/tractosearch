@@ -151,15 +151,15 @@ def three_mpts_binning(slines, bin_size=8.0, min_corner=None, max_corner=None, r
         max_corner = np.max(three_mpts.reshape((-1, 3)), axis=0)
 
     # Compute bin shape from "min to max" / "0 to (max-min)"
-    bin_shape = (max_corner // bin_size + 1.0).astype(int)
+    bin_shape = (max_corner // bin_size + 1.0).astype(np.uint64)  # TODO int
 
-    max_bin_id = np.prod(bin_shape, dtype=int)
+    max_bin_id = np.prod(bin_shape, dtype=np.uint64)  # TODO int
 
     # Bin mean-points
-    three_mpts = (three_mpts // bin_size).astype(int)
+    three_mpts = (three_mpts // bin_size).astype(np.uint128)  # TODO int
 
     mpt0 = np.ravel_multi_index(three_mpts[:, 0].T, bin_shape)
-    mpt1 = np.ravel_multi_index(three_mpts[:, 1].T, bin_shape)
+    mpt1 = np.ravel_multi_index(three_mpts[:, 1].T, bin_shape).astype(np.uint64)  # TODO int
     mpt2 = np.ravel_multi_index(three_mpts[:, 2].T, bin_shape)
     mpt0_smaller = mpt0 < mpt2
 
@@ -167,10 +167,17 @@ def three_mpts_binning(slines, bin_size=8.0, min_corner=None, max_corner=None, r
     mpt_first = np.where(mpt0_smaller, mpt0, mpt2)
     mpt_last = np.where(mpt0_smaller, mpt2, mpt0)
 
-    mpts_id_tri = upper_triangle_idx(max_bin_id, mpt_first, mpt_last)
-    max_bin_id_2 = (max_bin_id * (max_bin_id + 1))//2
-    mpts_id = np.ravel_multi_index(np.stack((mpt1, mpts_id_tri)), (max_bin_id, max_bin_id_2))
-    # max bin = max_bin_id * max_bin_id_2
+    mpts_id_tri = upper_triangle_idx(max_bin_id, mpt_first, mpt_last).astype(np.uint64)  # TODO int
+    # max_bin_id_2 = (max_bin_id * (max_bin_id + 1)) // 2  # TODO int
+    max_bin_id_2 = (max_bin_id * (max_bin_id + 1)) >> 1  # TODO int
+    print(mpt1.dtype)
+    print(mpts_id_tri.dtype)
+    print(max_bin_id.dtype)
+    print(max_bin_id_2.dtype)
+    mpts_id = np.ravel_multi_index(np.stack((mpt1.astype(np.uint64), mpts_id_tri)), (max_bin_id, max_bin_id_2))
+
+    max_bin = max_bin_id * max_bin_id_2
+    print(max_bin)
 
     if return_flips:
         return mpts_id, mpt0_smaller
@@ -201,7 +208,8 @@ def upper_triangle_idx(dim, row, col):
     utr_idx : int
         Upper triangle index / indices
     """
-    return (2 * dim + 1 - row) * row//2 + col - row
+    #return (2 * dim + 1 - row) * row//2 + col - row
+    return col - row + ( (((dim << 1) + 1 - row) * row) >> 1)
 
 
 def simplify(slines, bin_size=8.0, binning_nb=2, method="median", nb_mpts=16, return_count=False, dtype=np.float32):

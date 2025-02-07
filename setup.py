@@ -12,7 +12,7 @@ INSTALL_REQUIRES = ["numpy>=1.16.2",
                     "tqdm>=4.29.0",
                     "h5py>=2.5.0",
                     "dipy>=1.0.0",
-                    "lpqtree>=0.0.4"],
+                    "lpqtree>=0.0.6"],
 
 TESTS_REQUIRE = ['pytest',
                  'pytest-cov']
