@@ -45,8 +45,8 @@ def _build_arg_parser():
     p.add_argument('out_folder',
                    help='Output streamlines folder')
 
-    p.add_argument('--min_cluster', type=int, default=1,
-                   help='Minimum number of streamlines in a cluster [%(default)s]')
+    p.add_argument('--min_threshold', type=int, default=1,
+                   help='Minimum number of streamlines in a bin [%(default)s]')
 
     p.add_argument('--method', default="median", choices=("median", "mean"),
                    help='Streamlines grouping method [%(default)s]')
@@ -95,7 +95,7 @@ def main():
                                            return_count=True,
                                            dtype=np.float32)
     # Filter results
-    mask = bin_count >= args.min_cluster
+    mask = bin_count >= args.min_threshold
 
     # Save streamlines
     prefix = f"{args.out_folder}/tractosearch_bins_{str(args.bin_size).replace('.', '_')}mm"

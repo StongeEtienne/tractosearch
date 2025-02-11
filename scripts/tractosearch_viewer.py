@@ -9,6 +9,7 @@ import lpqtree
 
 from tractosearch.io import load_slines
 from tractosearch.resampling import resample_slines_to_array
+from tractosearch.binning import simplify
 
 try:
     import vtk
@@ -22,7 +23,7 @@ def _build_arg_parser():
     p = argparse.ArgumentParser(description=__doc__,
         formatter_class=argparse.RawTextHelpFormatter)
 
-    p.add_argument('in_tractogram',
+    p.add_argument('in_tractogram', nargs='+',
                    help='Streamlines to view')
 
     p.add_argument('--in_nii', default=None,
@@ -48,10 +49,13 @@ def _build_arg_parser():
                    help='Number of mean-points for the kdtree internal search, [%(default)s] \n'
                         'does not change the precision, only the computation time.')
 
+    p.add_argument('--method', default="median", choices=("median", "mean", "count"),
+                   help='Streamlines grouping method [%(default)s]')
+
     p.add_argument('--no_flip', action='store_true',
                    help='Disable the comparison in both streamlines orientation')
 
-    p.add_argument('--cpu', type=int, default=24,
+    p.add_argument('--cpu', type=int, default=8,
                    help='Number of cpu core for the Fast Streamlines search with LpqTree, [%(default)s]')
     return p
 
@@ -60,29 +64,37 @@ def main():
     parser = _build_arg_parser()
     args = parser.parse_args()
 
-    input_header = args.in_tractogram
-    if args.in_nii:
-        input_header = args.in_nii
-    else:
-        assert ".trk" in args.in_tractogram, "Non-'.trk' files requires a Nifti file ('--in_nii')"
-
     # Load streamlines
-    slines = load_slines(args.in_tractogram, input_header)
-    # Resample streamlines
-    slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
-
+    slines = []
+    for tractogram in args.in_tractogram:
+        slines.extend(load_slines(tractogram, tractogram))
 
     # Generate the L21 k-d tree with LpqTree
-    l21_radius = args.mean_distance * args.resample
-    nn = lpqtree.KDTree(metric="l21", radius=l21_radius)
+    if args.method == "count":
+        slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True)
+        l21_radius = args.mean_distance * args.resample
+        nn = lpqtree.KDTree(metric="l21", radius=l21_radius)
 
-    if args.no_flip:
-        nn.fit_and_radius_search(slines_arr, slines_arr,
-                                 radius=l21_radius, nb_mpts=args.nb_mpts, count_only=True, n_jobs=args.cpu)
+        if args.no_flip:
+            nn.fit_and_radius_search(slines_arr, slines_arr,
+                                     radius=l21_radius, nb_mpts=args.nb_mpts, count_only=True, n_jobs=args.cpu)
+        else:
+            nn.fit_and_radius_search(np.concatenate([slines_arr, np.flip(slines_arr, axis=1)]), slines_arr,
+                                     radius=l21_radius, nb_mpts=args.nb_mpts, count_only=True, n_jobs=args.cpu)
+        counts = nn.get_count()
     else:
-        nn.fit_and_radius_search(np.concatenate([slines_arr, np.flip(slines_arr, axis=1)]), slines_arr,
-                                 radius=l21_radius, nb_mpts=args.nb_mpts, count_only=True, n_jobs=args.cpu)
-    counts = nn.get_count()
+        mni_shape = np.array((193, 229, 193))
+        min_corner =  np.array((-96, -132, -78))
+        max_corner =  min_corner + mni_shape
+        slines_centr, counts = simplify(slines,
+                                        bin_size=args.mean_distance,
+                                        binning_nb=2,
+                                        nb_mpts=args.resample,
+                                        method=args.method,
+                                        return_count=True,
+                                        min_corner=min_corner,
+                                        max_corner=max_corner)
+        slines_arr = slines_centr
 
     # filter streamlines with no enough density
     if args.min_count > 1:
@@ -110,7 +122,7 @@ def main():
 def generate_scene(polydata, colormap=None):
     # Scene parameters
     size = (1000, 800)
-    light = (0.4, 0.2, 0.1)
+    light = (0.8, 0.4, 0.2)
     background = (0.0, 0.0, 0.0)
     camera_rot = (0.0, 0.0, 0.0)
     zoom = 1.0
@@ -168,7 +180,7 @@ def generate_scene(polydata, colormap=None):
 
     if colormap:
         scalar_bar = vtk.vtkScalarBarActor()
-        scalar_bar.SetTitle("test")
+        scalar_bar.SetTitle("count")
         scalar_bar.SetLookupTable(colormap)
         scalar_bar.SetNumberOfLabels(7)
         renderer.AddActor(scalar_bar)
@@ -222,7 +234,7 @@ def lines_to_vtk_polydata(lines, colors=None):
 
     # Get lines_array in vtk input format
     lines_array = []
-    points_per_line = np.zeros([nb_lines], dtype=np.int32)
+    points_per_line = np.zeros([nb_lines], dtype=int)
     current_position = 0
     for i in range(nb_lines):
         current_len = len(lines[i])
@@ -314,15 +326,28 @@ def generate_colormap(scale_range=(0.0, 1.0), hue_range=(0.8, 0.0),
     lookup_table : vtkLookupTable
 
     """
-    lookup_table = vtk.vtkLookupTable()
-    lookup_table.SetRange(scale_range)
+    lut = vtk.vtkLookupTable()
+    lut.SetRange(scale_range)
+    #
+    # lut.SetHueRange(hue_range)
+    # lut.SetSaturationRange(saturation_range)
+    # lut.SetValueRange(value_range)
+    # lut.SetNanColor(nan_color)
 
-    lookup_table.SetHueRange(hue_range)
-    lookup_table.SetSaturationRange(saturation_range)
-    lookup_table.SetValueRange(value_range)
-    lookup_table.SetNanColor(nan_color)
-    lookup_table.Build()
-    return lookup_table
+    lut.SetNumberOfColors(11)
+    lut.SetTableValue(0, 0.2, 0.2, 0.3, 0.1)
+    lut.SetTableValue(1, 0.2, 0.2, 0.4, 0.1)
+    lut.SetTableValue(2, 0.2, 0.2, 0.5, 0.2)
+    lut.SetTableValue(3, 0.2, 0.2, 0.6, 0.3)
+    lut.SetTableValue(4, 0.2, 0.2, 0.7, 0.4)
+    lut.SetTableValue(5, 0.2, 0.3, 0.8, 0.5)
+    lut.SetTableValue(6, 0.2, 0.4, 0.9, 0.6)
+    lut.SetTableValue(7, 0.2, 0.5, 0.9, 0.7)
+    lut.SetTableValue(8, 0.2, 0.6, 1.0, 0.8)
+    lut.SetTableValue(9, 0.1, 0.8, 1.0, 0.9)
+    lut.SetTableValue(10, 0.0, 1.0, 1.0, 1.0)
+    lut.Build()
+    return lut
 
 if __name__ == '__main__':
     main()

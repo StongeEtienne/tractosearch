@@ -6,8 +6,6 @@ import nibabel as nib
 from dipy.io.streamline import load_tractogram, save_tractogram
 from dipy.io.stateful_tractogram import StatefulTractogram, Space
 
-from tractosearch.resampling import resample_slines_to_array
-
 
 SUPPORTED_FORMAT = ['trk', 'tck', 'vtk', 'vtp', 'fib', 'dpy', 'npy']
 

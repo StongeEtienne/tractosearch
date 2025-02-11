@@ -101,7 +101,7 @@ def split_slines_to_array(slines, mpts_length, nb_mpts, overlap, out_dtype=OUTTY
 
     sub_slines = []
 
-    slines_ids = np.zeros(len(slines), dtype=np.int32)
+    slines_ids = np.zeros(len(slines), dtype=int)
     for i, sline in enumerate(slines):
         mpts_arr = meanpts_sline(sline.astype(RTYPE), mpts_length=mpts_length)
         it = range(0, len(mpts_arr) - nb_mpts + 1, nb_mpts - overlap)
