@@ -45,10 +45,6 @@ def _build_arg_parser():
                         'A lower number will increase the number of False positive, \n'
                         'where a streamline with distance > mean_distance could be included.')
 
-    p.add_argument('--nb_mpts', type=int, default=4,
-                   help='Number of mean-points for the kdtree internal search, [%(default)s] \n'
-                        'does not change the precision, only the computation time.')
-
     p.add_argument('--method', default="median", choices=("median", "mean", "count"),
                    help='Streamlines grouping method [%(default)s]')
 
@@ -71,42 +67,41 @@ def main():
 
     # Generate the L21 k-d tree with LpqTree
     if args.method == "count":
-        slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True)
+        slines = resample_slines_to_array(slines, args.resample, meanpts_resampling=True)
         l21_radius = args.mean_distance * args.resample
         nn = lpqtree.KDTree(metric="l21", radius=l21_radius)
 
         if args.no_flip:
-            nn.fit_and_radius_search(slines_arr, slines_arr,
-                                     radius=l21_radius, nb_mpts=args.nb_mpts, count_only=True, n_jobs=args.cpu)
+            nn.fit_and_radius_search(slines, slines,
+                                     radius=l21_radius, nb_mpts=4, count_only=True, n_jobs=args.cpu)
         else:
-            nn.fit_and_radius_search(np.concatenate([slines_arr, np.flip(slines_arr, axis=1)]), slines_arr,
-                                     radius=l21_radius, nb_mpts=args.nb_mpts, count_only=True, n_jobs=args.cpu)
+            nn.fit_and_radius_search(np.concatenate([slines, np.flip(slines, axis=1)]), slines,
+                                     radius=l21_radius, nb_mpts=4, count_only=True, n_jobs=args.cpu)
         counts = nn.get_count()
     else:
         mni_shape = np.array((193, 229, 193))
         min_corner =  np.array((-96, -132, -78))
         max_corner =  min_corner + mni_shape
-        slines_centr, counts = simplify(slines,
-                                        bin_size=args.mean_distance,
-                                        binning_nb=2,
-                                        nb_mpts=args.resample,
-                                        method=args.method,
-                                        return_count=True,
-                                        min_corner=min_corner,
-                                        max_corner=max_corner)
-        slines_arr = slines_centr
+        slines, counts = simplify(slines,
+                                  bin_size=args.mean_distance,
+                                  binning_nb=2,
+                                  nb_mpts=args.resample,
+                                  method=args.method,
+                                  return_count=True,
+                                  min_corner=min_corner,
+                                  max_corner=max_corner)
 
     # filter streamlines with no enough density
     if args.min_count > 1:
         mask = (counts >= args.min_count)
         counts = counts[mask]
-        slines_arr = slines_arr[mask]
+        slines = slines[mask]
 
     # streamlines measure to each vertex
     scalars = np.repeat(counts, args.resample, axis=None).astype(np.float32)
 
     # Poly data
-    polydata = lines_to_vtk_polydata(slines_arr)
+    polydata = lines_to_vtk_polydata(slines)
 
     # Set scalars
     vtk_scalars = ns.numpy_to_vtk(scalars, deep=True)
@@ -115,7 +110,7 @@ def main():
     polydata.GetPointData().SetScalars(vtk_scalars)
 
     # Colormap
-    test = generate_colormap(scale_range=(np.min(scalars), np.max(scalars)/2.0))
+    test = generate_colormap(scale_range=(np.min(scalars), np.max(scalars)), logscale=True)
 
     generate_scene(polydata, colormap=test)
 
@@ -306,7 +301,7 @@ def numpy_to_vtk_colors(colors):
 
 def generate_colormap(scale_range=(0.0, 1.0), hue_range=(0.8, 0.0),
                       saturation_range=(1.0, 1.0), value_range=(0.8, 0.8),
-                      nan_color=(0.2, 0.2, 0.2, 1.0)):
+                      nan_color=(0.2, 0.2, 0.2, 1.0), logscale=False):
     """ Generate colormap's lookup table
 
     Parameters
@@ -327,6 +322,8 @@ def generate_colormap(scale_range=(0.0, 1.0), hue_range=(0.8, 0.0),
 
     """
     lut = vtk.vtkLookupTable()
+    if logscale:
+        lut.SetScaleToLog10()
     lut.SetRange(scale_range)
     #
     # lut.SetHueRange(hue_range)

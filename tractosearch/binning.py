@@ -109,15 +109,11 @@ def simplify(slines, bin_size=8.0, binning_nb=2, method="median", nb_mpts=16, re
     bin_centroids : numpy array int (nb_slines)
         Bin id for each streamline
     """
+    assert 2 <= binning_nb <= 4, "only binning_nb from 2 to 4 is supported"
+    mpts_id, flips = mpts_binning(slines, binning_nb, bin_size=bin_size, return_flips=True,
+                                  min_corner=min_corner, max_corner=max_corner)
 
     slines_mpts = resample_slines_to_array(slines, nb_mpts)
-
-    if 2 <= binning_nb <= 4:
-        mpts_id, flips = mpts_binning(slines, binning_nb, bin_size=bin_size, return_flips=True,
-                                      min_corner=min_corner, max_corner=max_corner)
-    else:
-        raise NotImplementedError()
-
     u, inv, count = np.unique(mpts_id, return_inverse=True, return_counts=True)
 
     slines_mpts[flips] = np.flip(slines_mpts[flips], axis=1)
