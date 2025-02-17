@@ -64,17 +64,17 @@ def mpts_binning(slines, binning_nb=2, bin_size=8.0, min_corner=None, max_corner
 
     # Binning functions
     if binning_nb == 1:
-        assert MAXINT >= INTFULL, "Integer overflow"
+        assert MAXINT >= INTFULL, f"Integer overflow, from shape {bin_shape} ** {binning_nb}"
         assert not return_flips, "return_flips=True is not compatible with binning_nb == 1"
         return mpts_id[:, 0]
     elif binning_nb == 2:
-        assert MAXINT >= INTTRI, "Integer overflow"
+        assert MAXINT >= INTTRI, f"Integer overflow, from shape {bin_shape} ** {binning_nb}"
         mpts_id, to_flip = _binning_2mpts(mpts_id, max_bin_id)
     elif binning_nb == 3:
-        assert MAXINT >= INTTRI*INTFULL, "Integer overflow"
+        assert MAXINT >= INTTRI*INTFULL, f"Integer overflow, from shape {bin_shape} ** {binning_nb}"
         mpts_id, to_flip = _binning_3mpts(mpts_id, max_bin_id)
     elif binning_nb == 4:
-        assert MAXINT >= INTFULL*INTFULL * (INTFULL*INTFULL + 1) // 2, "Integer overflow"
+        assert MAXINT >= INTFULL*INTFULL * (INTFULL*INTFULL + 1) // 2, f"Integer overflow, from shape {bin_shape} ** {binning_nb}"
         mpts_id, to_flip = _binning_4mpts(mpts_id, max_bin_id)
     else:
         raise NotImplementedError()
@@ -167,7 +167,6 @@ def upper_triangle_idx(dim, row, col):
     """
     assert(np.all(row <= col))
     return col - row + ( (((dim << 1) + 1 - row) * row) >> 1)
-
 
 
 def _binning_2mpts(mpts_id, max_bin_id):

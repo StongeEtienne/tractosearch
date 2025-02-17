@@ -79,17 +79,14 @@ def main():
                                      radius=l21_radius, nb_mpts=4, count_only=True, n_jobs=args.cpu)
         counts = nn.get_count()
     else:
-        mni_shape = np.array((193, 229, 193))
-        min_corner =  np.array((-96, -132, -78))
-        max_corner =  min_corner + mni_shape
         slines, counts = simplify(slines,
                                   bin_size=args.mean_distance,
-                                  binning_nb=2,
+                                  binning_nb=4,
                                   nb_mpts=args.resample,
                                   method=args.method,
                                   return_count=True,
-                                  min_corner=min_corner,
-                                  max_corner=max_corner)
+                                  min_corner=None,
+                                  max_corner=None)
 
     # filter streamlines with no enough density
     if args.min_count > 1:
