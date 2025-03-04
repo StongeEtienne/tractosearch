@@ -16,6 +16,7 @@ except ImportError:
         return decorator
 
 
+ITYPE = np.int64
 RTYPE = np.float64
 OUTTYPE = np.float32
 EPS = RTYPE(1.0e-8)
@@ -94,6 +95,7 @@ def split_slines_to_array(slines, mpts_length, nb_mpts, overlap, out_dtype=OUTTY
         International Workshop on Computational Diffusion MRI,
         pp. 82-95. Springer, Cham, 2021.
     """
+    ## cannot check type with assert
     # if overlap >= nb_mpts:
     #     raise ValueError(f"overlap must be smaller than nb_mpts")
     # if not out_dtype:
@@ -101,7 +103,7 @@ def split_slines_to_array(slines, mpts_length, nb_mpts, overlap, out_dtype=OUTTY
 
     sub_slines = []
 
-    slines_ids = np.zeros(len(slines), dtype=int)
+    slines_ids = np.zeros(len(slines), dtype=ITYPE)
     for i, sline in enumerate(slines):
         mpts_arr = meanpts_sline(sline.astype(RTYPE), mpts_length=mpts_length)
         it = range(0, len(mpts_arr) - nb_mpts + 1, nb_mpts - overlap)

@@ -8,7 +8,7 @@ import numpy as np
 import lpqtree
 
 from tractosearch.io import load_slines
-from tractosearch.resampling import resample_slines_to_array
+from tractosearch.resampling import resample_slines_to_array, split_slines_to_array
 from tractosearch.binning import simplify
 
 try:
@@ -63,11 +63,16 @@ def main():
     # Load streamlines
     slines = []
     for tractogram in args.in_tractogram:
-        slines.extend(load_slines(tractogram, tractogram))
+        s = resample_slines_to_array(load_slines(tractogram, tractogram),
+                                     args.resample,
+                                     meanpts_resampling=True)
+        slines.extend(s)
+        print(s.shape)
+    slines = np.concatenate(slines, axis=1)
+    print(slines.shape)
 
     # Generate the L21 k-d tree with LpqTree
     if args.method == "count":
-        slines = resample_slines_to_array(slines, args.resample, meanpts_resampling=True)
         l21_radius = args.mean_distance * args.resample
         nn = lpqtree.KDTree(metric="l21", radius=l21_radius)
 
@@ -79,6 +84,8 @@ def main():
                                      radius=l21_radius, nb_mpts=4, count_only=True, n_jobs=args.cpu)
         counts = nn.get_count()
     else:
+        # Split streamlines in smaller ones
+        # slines, _ = split_slines_to_array(slines, mpts_length=10.0, nb_mpts=6, overlap=2)
         slines, counts = simplify(slines,
                                   bin_size=args.mean_distance,
                                   binning_nb=4,
