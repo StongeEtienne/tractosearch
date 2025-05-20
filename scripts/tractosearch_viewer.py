@@ -48,6 +48,9 @@ def _build_arg_parser():
     p.add_argument('--method', default="median", choices=("median", "mean", "count"),
                    help='Streamlines grouping method [%(default)s]')
 
+    p.add_argument('--nb_mpts', type=int, default=4, choices=(2, 3, 4),
+                   help='Number of mean-points used for binning streamlines [%(default)s].')
+
     p.add_argument('--no_flip', action='store_true',
                    help='Disable the comparison in both streamlines orientation')
 
@@ -63,13 +66,11 @@ def main():
     # Load streamlines
     slines = []
     for tractogram in args.in_tractogram:
-        s = resample_slines_to_array(load_slines(tractogram, tractogram),
+        slines.append(
+            resample_slines_to_array(load_slines(tractogram, tractogram),
                                      args.resample,
-                                     meanpts_resampling=True)
-        slines.extend(s)
-        print(s.shape)
-    slines = np.concatenate(slines, axis=1)
-    print(slines.shape)
+                                     meanpts_resampling=True))
+    slines = np.concatenate(slines)
 
     # Generate the L21 k-d tree with LpqTree
     if args.method == "count":
@@ -78,17 +79,17 @@ def main():
 
         if args.no_flip:
             nn.fit_and_radius_search(slines, slines,
-                                     radius=l21_radius, nb_mpts=4, count_only=True, n_jobs=args.cpu)
+                                     radius=l21_radius, nb_mpts=args.nb_mpts, count_only=True, n_jobs=args.cpu)
         else:
             nn.fit_and_radius_search(np.concatenate([slines, np.flip(slines, axis=1)]), slines,
-                                     radius=l21_radius, nb_mpts=4, count_only=True, n_jobs=args.cpu)
+                                     radius=l21_radius, nb_mpts=args.nb_mpts, count_only=True, n_jobs=args.cpu)
         counts = nn.get_count()
     else:
         # Split streamlines in smaller ones
         # slines, _ = split_slines_to_array(slines, mpts_length=10.0, nb_mpts=6, overlap=2)
         slines, counts = simplify(slines,
                                   bin_size=args.mean_distance,
-                                  binning_nb=4,
+                                  binning_nb=args.nb_mpts,
                                   nb_mpts=args.resample,
                                   method=args.method,
                                   return_count=True,

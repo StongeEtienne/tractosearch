@@ -10,7 +10,7 @@ BIN_DTYPE = int # np.uint64 would be preferable, however ravel_multi_index alway
 BIN_DIM = 3  # streamlines are generally 3D objects
 
 
-def mpts_binning(slines, binning_nb=2, bin_size=8.0, min_corner=None, max_corner=None, return_flips=False):
+def mpts_binning(slines, binning_nb=2, bin_size=8.0, return_flips=True, min_corner=None, max_corner=None):
     """
     Compute the M mean-points binning index for each streamlines
 
@@ -31,10 +31,12 @@ def mpts_binning(slines, binning_nb=2, bin_size=8.0, min_corner=None, max_corner
     -------
     bin_id : numpy array int (nb_slines)
         Bin id for each streamline
+    to_flip : numpy array bool (nb_slines)
+        If the streamlines was flipped for binning
     """
 
     # Compute the mean-points representation
-    mpts = resample_slines_to_array(slines, binning_nb)
+    mpts = resample_slines_to_array(slines, binning_nb) # TODO optimise
 
     # Move to corner and compute bin shape
     if min_corner is None:
@@ -113,11 +115,11 @@ def simplify(slines, bin_size=8.0, binning_nb=2, method="median", nb_mpts=16, re
     mpts_id, flips = mpts_binning(slines, binning_nb, bin_size=bin_size, return_flips=True,
                                   min_corner=min_corner, max_corner=max_corner)
 
+    # TODO optimise
     slines_mpts = resample_slines_to_array(slines, nb_mpts)
+
     u, inv, count = np.unique(mpts_id, return_inverse=True, return_counts=True)
-
     slines_mpts[flips] = np.flip(slines_mpts[flips], axis=1)
-
     avg_bin = np.zeros((len(u), nb_mpts, BIN_DIM), dtype=slines_mpts.dtype)
     np.add.at(avg_bin, inv, slines_mpts)
     avg_bin /= count.reshape((-1, 1, 1))
