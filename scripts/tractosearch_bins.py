@@ -20,8 +20,7 @@ DESCRIPTION = """
     See [StOnge2022] for details.
 
     Example:
-        tractosearch_register.py sub01_track.trk recobundle_atlas/all.trk \\
-            result_matrix.txt --out_tractogram sub01_track__in_ref_space.trk 
+        tractosearch_bins.py sub01_track.trk 8.0 results_bin_8mm/ --min_threshold 10
     """
 
 EPILOG = """
@@ -51,7 +50,7 @@ def _build_arg_parser():
     p.add_argument('--method', default="median", choices=("median", "mean"),
                    help='Streamlines grouping method [%(default)s]')
 
-    p.add_argument('--resample', type=int, default=32,
+    p.add_argument('--resample', type=int, default=24,
                    help='Number points for the average / mean representation')
 
     p.add_argument('--nb_mpts', type=int, default=2, choices=(2, 3),
@@ -90,10 +89,9 @@ def main():
     slines_centroids, bin_count = simplify(slines,
                                            bin_size=args.bin_size,
                                            binning_nb=args.nb_mpts,
-                                           nb_mpts=args.resample,
+                                           resampling=args.resample,
                                            method="median",
-                                           return_count=True,
-                                           dtype=np.float32)
+                                           return_count=True)
     # Filter results
     mask = bin_count >= args.min_threshold
 

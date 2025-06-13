@@ -9,7 +9,7 @@ import numpy as np
 import lpqtree
 
 from tractosearch.io import load_slines, save_slines
-from tractosearch.resampling import resample_slines_to_array, aggregate_meanpts
+from tractosearch.resampling import meanpts_slines, aggregate_meanpts
 from tractosearch.transform import apply_transform
 from tractosearch.util import nearest_from_matrix_col, split_unique_indices
 
@@ -61,7 +61,7 @@ def _build_arg_parser():
     p.add_argument('out_folder',
                    help='Output streamlines folder')
 
-    p.add_argument('--resample', type=int, default=32,
+    p.add_argument('--resample', type=int, default=24,
                    help='Resample the number of mean-points in streamlines, [%(default)s] \n'
                         'A lower number will increase the number of False positive, \n'
                         'where a streamline with distance > mean_distance could be included.')
@@ -120,7 +120,7 @@ def main():
     slines = load_slines(args.in_tractogram, input_header)
 
     # Resample streamlines
-    slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
+    slines_arr = meanpts_slines(slines, args.resample)
 
     if args.transform:
         trfo = np.loadtxt(args.transform)
@@ -157,7 +157,7 @@ def main():
         slines_ref = load_slines(ref_tractogram, ref_header)
 
         # Resample streamlines
-        slines_ref = resample_slines_to_array(slines_ref, args.resample, meanpts_resampling=True, out_dtype=np.float32)
+        slines_ref = meanpts_slines(slines_ref, args.resample)
         slines_ref_mpts = aggregate_meanpts(slines_ref, args.nb_mpts)
 
         if not args.no_flip:

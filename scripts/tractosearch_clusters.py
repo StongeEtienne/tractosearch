@@ -9,7 +9,7 @@ import numpy as np
 import hdbscan
 
 from tractosearch.io import load_slines, save_slines
-from tractosearch.resampling import resample_slines_to_array
+from tractosearch.resampling import meanpts_slines
 from tractosearch.search import radius_search
 from tractosearch.group import connected_components_indices, connected_components_split, group_unique_labels, group_to_centroid
 
@@ -59,7 +59,7 @@ def _build_arg_parser():
     p.add_argument('--allow_single_cluster', action='store_true',
                    help='hdbscan allow_single_cluster')
 
-    p.add_argument('--resample', type=int, default=32,
+    p.add_argument('--resample', type=int, default=24,
                    help='Resample the number of mean-points in streamlines, [%(default)s] \n'
                         'A lower number will increase the number of False positive, \n'
                         'where a streamline with distance > mean_distance could be included.')
@@ -107,7 +107,7 @@ def main():
     slines = load_slines(args.in_tractogram, input_header)
 
     # Resample streamlines
-    slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
+    slines_arr = meanpts_slines(slines, args.resample)
 
     # Generate the L21 k-d tree with LpqTree
     l21_radius = args.mean_distance * args.resample

@@ -153,8 +153,8 @@ def connected_components_indices(sparse_mtx):
     """
     csr_mtx = sparse_mtx.tocsr()
     _, labels = connected_components(csr_mtx, directed=False, return_labels=True)
-    _, list_ids = group_unique_labels(labels)
-    return list_ids
+    _, list_of_ids = group_unique_labels(labels)
+    return list_of_ids
 
 
 def connected_components_split(sparse_mtx, list_of_ids):

@@ -3,12 +3,13 @@
 # Etienne St-Onge
 
 import argparse
+import logging
 
 import numpy as np
 import lpqtree
 
 from tractosearch.io import load_slines
-from tractosearch.resampling import resample_slines_to_array, split_slines_to_array
+from tractosearch.resampling import meanpts_slines, split_slines_to_array
 from tractosearch.binning import simplify
 
 try:
@@ -29,9 +30,6 @@ def _build_arg_parser():
     p.add_argument('--in_nii', default=None,
                    help='Input anatomy (nifti), for non ".trk" tractogram')
 
-    p.add_argument('--color', nargs=3, type=float, default=None,
-                   help="Streamlines color [%(default)s]")
-
     p.add_argument('--mean_distance', type=float, default=4.0,
                    help='Streamlines maximum distance in mm, based on the \n'
                         'mean point-wise euclidean distance (MDF)')
@@ -40,7 +38,7 @@ def _build_arg_parser():
                    help='Streamlines maximum distance in mm, based on the \n'
                         'mean point-wise euclidean distance (MDF)')
 
-    p.add_argument('--resample', type=int, default=32,
+    p.add_argument('--resample', type=int, default=24,
                    help='Resample the number of mean-points in streamlines, [%(default)s] \n'
                         'A lower number will increase the number of False positive, \n'
                         'where a streamline with distance > mean_distance could be included.')
@@ -48,11 +46,11 @@ def _build_arg_parser():
     p.add_argument('--method', default="median", choices=("median", "mean", "count"),
                    help='Streamlines grouping method [%(default)s]')
 
-    p.add_argument('--nb_mpts', type=int, default=4, choices=(2, 3, 4),
+    p.add_argument('--nb_mpts', type=int, default=4, choices=(1, 2, 3, 4),
                    help='Number of mean-points used for binning streamlines [%(default)s].')
 
-    p.add_argument('--no_flip', action='store_true',
-                   help='Disable the comparison in both streamlines orientation')
+    p.add_argument('--rgb', action='store_true',
+                   help="Streamlines color with transparency [%(default)s]")
 
     p.add_argument('--cpu', type=int, default=8,
                    help='Number of cpu core for the Fast Streamlines search with LpqTree, [%(default)s]')
@@ -62,62 +60,66 @@ def _build_arg_parser():
 def main():
     parser = _build_arg_parser()
     args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO)
 
     # Load streamlines
     slines = []
     for tractogram in args.in_tractogram:
-        slines.append(
-            resample_slines_to_array(load_slines(tractogram, tractogram),
-                                     args.resample,
-                                     meanpts_resampling=True))
+        logging.debug(f"Loading: {tractogram} ...")
+        if args.in_nii :
+            ref = args.in_nii
+        else:
+            ref = tractogram
+
+        slines.append(meanpts_slines(load_slines(tractogram, ref), args.resample))
     slines = np.concatenate(slines)
 
     # Generate the L21 k-d tree with LpqTree
     if args.method == "count":
+        logging.info(f"Estimate local density with streamline count in {args.mean_distance}mm radius")
         l21_radius = args.mean_distance * args.resample
         nn = lpqtree.KDTree(metric="l21", radius=l21_radius)
-
-        if args.no_flip:
-            nn.fit_and_radius_search(slines, slines,
-                                     radius=l21_radius, nb_mpts=args.nb_mpts, count_only=True, n_jobs=args.cpu)
-        else:
-            nn.fit_and_radius_search(np.concatenate([slines, np.flip(slines, axis=1)]), slines,
-                                     radius=l21_radius, nb_mpts=args.nb_mpts, count_only=True, n_jobs=args.cpu)
-        counts = nn.get_count()
+        nn.fit_and_radius_search(np.concatenate([slines, np.flip(slines, axis=1)]), slines,
+                                 radius=l21_radius, nb_mpts=args.nb_mpts, count_only=True, n_jobs=args.cpu)
+        count = nn.get_count()
+        logging.info(f"max density : {count.max()}")
     else:
         # Split streamlines in smaller ones
-        # slines, _ = split_slines_to_array(slines, mpts_length=10.0, nb_mpts=6, overlap=2)
-        slines, counts = simplify(slines,
+        #slines, _ = split_slines_to_array(slines, mpts_length=10.0, nb_mpts=6, overlap=2)
+        #logging.info(f"Split streamlines in subsection of {mpts_length}mm, with {overlap}vts overlap")
+
+        logging.info(f"Group streamlines with {args.nb_mpts}mpts bins of size {args.mean_distance}mm")
+        slines, count = simplify(slines,
                                   bin_size=args.mean_distance,
                                   binning_nb=args.nb_mpts,
-                                  nb_mpts=args.resample,
+                                  resample=0,
                                   method=args.method,
                                   return_count=True,
                                   min_corner=None,
                                   max_corner=None)
 
-    # filter streamlines with no enough density
     if args.min_count > 1:
-        mask = (counts >= args.min_count)
-        counts = counts[mask]
+        mask = (count >= args.min_count)
         slines = slines[mask]
-
-    # streamlines measure to each vertex
-    scalars = np.repeat(counts, args.resample, axis=None).astype(np.float32)
-
-    # Poly data
-    polydata = lines_to_vtk_polydata(slines)
+        count = count[mask]
+        logging.info(f"Filter result with {len(count)} bin > {args.min_count} slines")
 
     # Set scalars
-    vtk_scalars = ns.numpy_to_vtk(scalars, deep=True)
-    vtk_scalars.SetNumberOfComponents(1)
-    vtk_scalars.SetName("Scalars")
-    polydata.GetPointData().SetScalars(vtk_scalars)
+    if args.rgb:
+        polydata = lines_to_vtk_polydata(slines, colors="RGB")
+        cmap = None
+    else:
+        polydata = lines_to_vtk_polydata(slines)
+        scalars = np.repeat(count, args.resample, axis=None).astype(np.float32)
+        vtk_scalars = ns.numpy_to_vtk(scalars, deep=True)
+        vtk_scalars.SetNumberOfComponents(1)
+        vtk_scalars.SetName("Scalars")
+        polydata.GetPointData().SetScalars(vtk_scalars)
 
-    # Colormap
-    test = generate_colormap(scale_range=(np.min(scalars), np.max(scalars)), logscale=True)
+        # Colormap
+        cmap = generate_colormap(scale_range=(np.min(scalars), np.max(scalars)), logscale=True)
 
-    generate_scene(polydata, colormap=test)
+    generate_scene(polydata, colormap=cmap)
 
 def generate_scene(polydata, colormap=None):
     # Scene parameters
@@ -129,7 +131,7 @@ def generate_scene(polydata, colormap=None):
     #display_colormap = "Range"
     png_magnify = 1
     line_width = 1.0
-    line_opacity = 0.2
+    line_opacity = 0.4
     max_peel = 20
     use_LOD = True
 
@@ -138,7 +140,6 @@ def generate_scene(polydata, colormap=None):
     poly_mapper.ScalarVisibilityOn()
     poly_mapper.InterpolateScalarsBeforeMappingOn()
     poly_mapper.StaticOn()
-
 
     poly_mapper.SetInputData(polydata)
     poly_mapper.Update()
