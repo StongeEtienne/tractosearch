@@ -8,7 +8,6 @@ import logging
 
 import numpy as np
 import hdbscan
-import lpqtree
 
 from tractosearch.io import load_slines, save_slines
 from tractosearch.resampling import resample_slines_to_array
