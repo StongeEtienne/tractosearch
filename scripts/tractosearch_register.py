@@ -119,7 +119,6 @@ def main():
         if args.ref_nii:
             header_ref = args.ref_nii
         else:
-            print(ref_tractogram)
             assert ".trk" in ref_tractogram, "Non-'.trk' files requires a Nifti file ('--ref_nii')"
 
         # Load reference tractogram

@@ -94,18 +94,8 @@ def main():
     all_ref_id = []
     all_ref_slines = []
     for ref_id, ref_tractogram in enumerate(args.ref_tractograms):
-
-        ref_header = ref_tractogram
-        if args.ref_nii:
-            ref_header = args.ref_nii
-        else:
-            assert ".trk" in ref_tractogram, "Non-'.trk' files requires a Nifti file ('--ref_nii')"
-
-        # Load reference tractogram
-        # sft_ref = load_tractogram(ref_tractogram, ref_header, to_space=Space.RASMM)
-        slines_ref = load_slines(ref_tractogram, ref_header)
-
-        # Resample streamlines
+        # sft_ref = load_tractogram(ref_tractogram,  args.ref_nii, to_space=Space.RASMM)
+        slines_ref = load_slines(ref_tractogram, args.ref_nii)
         slines_ref = meanpts_slines(slines_ref, args.resample)
 
         if not args.no_flip:
@@ -150,7 +140,7 @@ def main():
 
         # Save streamlines
         sline_ids = list_sline_ids[i]
-        save_slines(output_name, slines, indices=sline_ids, ref_file=ref_header)
+        save_slines(output_name, slines, indices=sline_ids, ref_file=input_header)
 
         if args.save_mapping:
             output_npy = f"{args.out_folder}/tractosearch_nn__{ref_str}.npy"

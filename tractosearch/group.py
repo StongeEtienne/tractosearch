@@ -4,7 +4,7 @@ from scipy.sparse import identity, csr_matrix
 from scipy.sparse.csgraph import connected_components
 
 from tractosearch.search import radius_search
-from tractosearch.resampling import resample_slines_to_array
+from tractosearch.resampling import meanpts_slines
 
 from lpqtree.lpqpydist import l21
 
@@ -31,7 +31,6 @@ def group_slines_to_centroid(slines, radius=24.0, resample=24, return_cov=False)
     covariance : numpy array (resample x d x d)
         Covariance for each points in the centroid_line
     """
-    slines = resample_slines_to_array(slines, resample)
     dist_mtx = radius_search(slines, None, radius=radius, resample=resample)
     return group_to_centroid(slines, dist_mtx, return_cov=return_cov)
 
@@ -57,7 +56,7 @@ def group_to_centroid(slines_arr, dist_mtx, return_cov=False):
     covariance : numpy array (resample x d x d)
         Covariance for each points in the centroid_line
     """
-    slines_2mpts = resample_slines_to_array(slines_arr, 2)
+    slines_2mpts = meanpts_slines(slines_arr, 2)
     center_id = find_center_id(dist_mtx)
 
     # Estimated middle line, from smoothed graph degree
@@ -135,7 +134,7 @@ def agglomerate_in_radius(slines, radius=96.0, resample=24):
     centroid_line : numpy array (resample x d)
         Centroid streamline
     """
-    slines = resample_slines_to_array(slines, resample)
+    slines = meanpts_slines(slines, resample)
     dist_mtx = radius_search(slines, None, radius=radius, resample=resample)
     dist_mtx.data = np.abs(dist_mtx.data)
     list_of_ids = connected_components_indices(dist_mtx)

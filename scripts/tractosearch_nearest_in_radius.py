@@ -9,7 +9,7 @@ import numpy as np
 import lpqtree
 
 from tractosearch.io import load_slines, save_slines
-from tractosearch.resampling import meanpts_slines, aggregate_meanpts
+from tractosearch.resampling import meanpts_slines, aggregate_meanpts, resample_and_aggregate
 from tractosearch.transform import apply_transform
 from tractosearch.util import nearest_from_matrix_col, split_unique_indices
 
@@ -147,23 +147,9 @@ def main():
     min_id = np.full(len(slines_arr), len(args.ref_tractograms), dtype=int)
     for ref_id, ref_tractogram in enumerate(args.ref_tractograms):
 
-        ref_header = ref_tractogram
-        if args.ref_nii:
-            ref_header = args.ref_nii
-        else:
-            assert ".trk" in ref_tractogram, "Non-'.trk' files requires a Nifti file ('--ref_nii')"
-
         # Load reference tractogram
-        slines_ref = load_slines(ref_tractogram, ref_header)
-
-        # Resample streamlines
-        slines_ref = meanpts_slines(slines_ref, args.resample)
-        slines_ref_mpts = aggregate_meanpts(slines_ref, args.nb_mpts)
-
-        if not args.no_flip:
-            # Duplicate all streamlines in opposite orientation
-            slines_ref = np.concatenate([slines_ref, np.flip(slines_ref, axis=1)])
-            slines_ref_mpts = np.concatenate([slines_ref_mpts, np.flip(slines_ref_mpts, axis=1)])
+        slines_ref = load_slines(ref_tractogram, args.ref_nii)
+        slines_ref_mpts, slines_ref = resample_and_aggregate(slines_ref, args.nb_mpts, args.resample, flip=(not args.no_flip))
 
         # Fast Streamline Search
         nn.radius_neighbors_full(slines_ref_mpts, slines_arr, slines_ref, l21_radius, n_jobs=args.cpu)
@@ -206,7 +192,7 @@ def main():
 
         # Save streamlines
         sline_ids = list_sline_ids[i]
-        save_slines(output_name, slines, indices=sline_ids, ref_file=ref_header)
+        save_slines(output_name, slines, indices=sline_ids, ref_file=input_header)
 
         if args.save_mapping:
             output_npy = f"{args.out_folder}/{dist_str}_{ref_str}.npy"
