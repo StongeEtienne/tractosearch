@@ -4,12 +4,10 @@ import numpy as np
 
 # optional import (numba)
 try:
-    # optional import
     from numba import njit
 except ImportError:
     print("Info: some functions in tractosearch.resampling"
           " are faster when 'numba' is installed")
-
     # create a generic (useless) decorator
     def njit(*args, **kwargs):
         def decorator(func):
