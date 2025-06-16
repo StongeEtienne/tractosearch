@@ -4,6 +4,7 @@
 
 import argparse
 import os
+import logging
 
 import numpy as np
 import hdbscan
@@ -86,6 +87,7 @@ def _build_arg_parser():
 def main():
     parser = _build_arg_parser()
     args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO)
 
     sline_metric = "l21"
 
@@ -95,28 +97,23 @@ def main():
     else:
         assert ".trk" in args.in_tractogram, "Non-'.trk' files requires a Nifti file ('--in_nii')"
 
-    use_both_dir = True
-    if args.no_flip:
-        use_both_dir = False
-
     # Generate output directory
     if not os.path.exists(args.out_folder):
         os.makedirs(args.out_folder)
 
-    # Load input Tractogram
+    logging.info(f"Loading tractogram")
     slines = load_slines(args.in_tractogram, input_header)
-
-    # Resample streamlines
     slines_arr = meanpts_slines(slines, args.resample)
 
-    # Generate the L21 k-d tree with LpqTree
+    logging.info(f"Computing the L21 distance matrix  with LpqTree")
     l21_radius = args.mean_distance * args.resample
-    dist_mtx = radius_search(slines_arr, None, radius=l21_radius, metric=sline_metric, both_dir=use_both_dir,
+    dist_mtx = radius_search(slines_arr, None, radius=l21_radius, metric=sline_metric, both_dir=not args.no_flip,
                              resample=args.resample, lp1_mpts=args.nb_mpts, nb_cpu=args.cpu, search_dtype=np.float32)
 
     # Group connected components
     dist_mtx.data = np.abs(dist_mtx.data)
     dist_mtx = dist_mtx.tocsr()
+
     list_of_indices = connected_components_indices(dist_mtx)
     list_of_mtx = connected_components_split(dist_mtx, list_of_indices)
 
