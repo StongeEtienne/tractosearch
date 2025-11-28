@@ -109,3 +109,4 @@ def nii_img_size(nii_file):
     voxel_sizes = np.array(img_header['pixdim'][1:4])
     img_size = img_shape.astype(float) * voxel_sizes
     return img_shape, voxel_sizes, img_size
+

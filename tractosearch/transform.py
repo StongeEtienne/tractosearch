@@ -3,6 +3,7 @@
 import numpy as np
 import lpqtree
 from dipy.align.streamlinear import compose_matrix44, decompose_matrix44
+from scipy.spatial.transform import Rotation
 
 from tractosearch.resampling import aggregate_meanpts, resample_slines_to_array
 from tractosearch.binning import simplify
@@ -270,3 +271,20 @@ def objective_two_side(self, opt_param, knn=1):
     nn.fit(np.concatenate([slines_mov, np.flip(slines_mov, axis=1)]))
     _, dists2 = nn.query(slines_ref, knn, return_distance=True, n_jobs=self.nb_cpu)
     return np.mean(dists1) + np.mean(dists2)
+
+
+def generate_random_transform(rotation_width=20.0, translation_width=10.0, scaling_width=0):
+    # np.random.seed(args.random)
+    t = Rotation.from_euler('zyx', np.random.uniform(-rotation_width, rotation_width, 3), degrees=True)
+    g_rot = t.as_matrix()
+    g_t = np.random.uniform(-translation_width, translation_width, 3)
+
+    g_s = 1.0
+    if scaling_width > 0:
+        g_s = np.random.uniform(1.0 - scaling_width, 1.0 + scaling_width, 1)
+
+    # slines_r = g_s * np.dot(slines_r, g_rot.T) + g_t
+    # for i, c_line in enumerate(slines_ref_slr):
+    #    slines_ref_slr[i] = g_s * np.dot(c_line, g_rot.T) + g_t
+    return g_rot, g_t, g_s
+

@@ -2,6 +2,7 @@
 
 import numpy as np
 
+
 try:
     # optional import
     from numba import njit
@@ -181,17 +182,18 @@ def resample_sline(sline, nb_rpts):
     res_sline = np.zeros((nb_rpts, sline.shape[1]), dtype=RTYPE)
 
     next_point = RTYPE(0.0)
+    one_const = RTYPE(1.0)
     i = 0
     k = 0
     while next_point < cumsum_seg_l[-1]:
-        if np.abs(next_point - cumsum_seg_l[k]) < EPS:
+        if abs(next_point - cumsum_seg_l[k]) < EPS:
             # exactly on the previous point
             res_sline[i] = sline[k]
             next_point += step
             i += 1
             k += 1
         elif next_point < cumsum_seg_l[k]:
-            ratio = RTYPE(1.0) - ((cumsum_seg_l[k] - next_point) / (cumsum_seg_l[k] - cumsum_seg_l[k - 1]))
+            ratio = one_const - ((cumsum_seg_l[k] - next_point) / (cumsum_seg_l[k] - cumsum_seg_l[k - 1]))
             delta = sline[k] - sline[k-1]
             res_sline[i] = sline[k - 1] + ratio * delta
 
