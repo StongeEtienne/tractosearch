@@ -3,6 +3,8 @@
 # Etienne St-Onge
 
 import argparse
+from contextlib import contextmanager
+import time
 
 import numpy as np
 import lpqtree
@@ -14,7 +16,6 @@ from tractosearch.util import nearest_from_matrix_col, split_unique_indices
 
 from dipy.segment.fss import FastStreamlineSearch, nearest_from_matrix_row
 
-import time
 
 SLINE_METRIC = "l21"
 
@@ -48,95 +49,68 @@ EPILOG = """
     """
 
 
+
 def _build_arg_parser():
     p = argparse.ArgumentParser(description=DESCRIPTION, epilog=EPILOG,
                                 formatter_class=argparse.RawTextHelpFormatter)
-
-
     p.add_argument('in_tractogram',
                    help='Streamlines to search or to cluster')
 
-    p.add_argument('ref_tractograms', nargs='+',
-                   help='Reference streamlines for the search')
+    p.add_argument('ref_tractograms', nargs='*', default=[],
+                   help='Reference streamlines for the search'
+                        ' (if no ref_tractograms is given, run on self)')
 
-    p.add_argument('mean_distance', type=float,
-                   help='Streamlines maximum distance in mm, based on the \n'
-                        'mean point-wise euclidean distance (MDF), ')
-
-    p.add_argument('knn', type=int,
-                   help='Streamlines maximum distance in mm, based on the \n'
-                        'mean point-wise euclidean distance (MDF), ')
+    p.add_argument('--mdf', type=float, default=6.0,
+                   help='Streamlines maximum distance in mm [%(default)s],\n '
+                        'based on the mean point-wise euclidean distance (MDF)')
 
     p.add_argument('--resample', type=int, default=24,
                    help='Resample the number of mean-points in streamlines, [%(default)s] \n'
                         'A lower number will increase the number of False positive, \n'
                         'where a streamline with distance > mean_distance could be included.')
 
-    p.add_argument('--nb_mpts', type=int, default=4,
+    p.add_argument('--mpts', nargs='+', default=[2, 3, 4],
                    help='Number of mean-points for the kdtree internal search, [%(default)s] \n'
                         'does not change the precision, only the computation time.')
+
+    p.add_argument('--no_flip', action='store_true',
+                   help='Disable the comparison in both streamlines orientation')
 
     p.add_argument('--max_slines', type=int,
                    help='Maximum number of input streamlines')
 
-    p.add_argument('--ref_nii', default=None,
-                   help='Input ref anatomy (nifti)')
+    p.add_argument('--max_for_naive', type=int, default=100,
+                   help='Maximum number of input streamlines for naive (brute force search) [%(default)s]')
 
-    p.add_argument('--output_format', default="trk",
-                   help='Output tractogram format, [%(default)s]')
-
-    p.add_argument('--cpu', type=int, nargs='+', default=[8, 1],
+    p.add_argument('--cpu', type=int, default=1,
                    help='Number of cpu core for the Fast Streamlines search with LpqTree, [%(default)s]')
 
+    p.add_argument('--ref_nii', default=None,
+                   help='Input ref anatomy (nifti)')
     return p
+
+
+@contextmanager
+def perf_timer(name: str):
+    counter = {}
+    start = time.perf_counter()
+    yield counter
+    end = time.perf_counter()
+    counter["elapsed"] = end - start
+    print_timer(name, counter['elapsed'])
+
+
+def print_timer(name, elapsed_time):
+    print(f"{name:<30} , {elapsed_time:.4f}")
 
 
 def main():
     parser = _build_arg_parser()
     args = parser.parse_args()
 
-    # Load Ref Tractogram
-    list_slines_ref = []
-    list_slines_ref_mpts = []
-    time0 = 0.0; time1 = 0.0; time2 = 0.0
-    count_ref = 0
-    for ref_id, ref_tractogram in enumerate(args.ref_tractograms):
-
-        ref_header = ref_tractogram
-        if args.ref_nii:
-            ref_header = args.ref_nii
-        else:
-            assert ".trk" in ref_tractogram, "Non-'.trk' files requires a Nifti file ('--ref_nii')"
-
-        # Load reference tractogram
-        time0_s = time.perf_counter()  # TODO timer start 0 (loading ref) ++
-        slines_ref = load_slines(ref_tractogram, ref_header)
-        time0_e = time.perf_counter()  # TODO timer end 0 (loading ref)
-
-        # Resample streamlines
-        time1_s = time.perf_counter()  # TODO timer start 1 (resampling ref) ++
-        slines_ref = resample_slines_to_array(slines_ref, args.resample, meanpts_resampling=True, out_dtype=np.float32)
-        time1_e = time.perf_counter()  # TODO timer end 1 (resampling ref)
-
-        time2_s = time.perf_counter()  # TODO timer start 2 (mpts ref) ++
-        slines_ref_mpts = aggregate_meanpts(slines_ref, args.nb_mpts)
-        time2_e = time.perf_counter()  # TODO timer end 2 (mpts ref)
-
-        slines_ref = np.concatenate([slines_ref, np.flip(slines_ref, axis=1)])
-        slines_ref_mpts = np.concatenate([slines_ref_mpts, np.flip(slines_ref_mpts, axis=1)])
-
-        count_ref += len(slines_ref)
-        list_slines_ref.append(slines_ref)
-        list_slines_ref_mpts.append(slines_ref_mpts)
-
-        time0 = time0 + (time0_e - time0_s)
-        time1 = time1 + (time1_e - time1_s)
-        time2 = time2 + (time2_e - time2_s)
-
-    print(f"loading_ref, {time0}")
-    print(f"resampling_ref, {time1}")
-    print(f"mpts_ref, {time2}")
-    print(f"nb_ref, {count_ref}")
+    # Constants
+    run_on_self = len(args.ref_tractograms) == 0
+    bidirectional = not args.no_flip
 
     # Load input Tractogram
     input_header = args.in_tractogram
@@ -145,229 +119,143 @@ def main():
     else:
         assert ".trk" in args.in_tractogram, "Non-'.trk' files requires a Nifti file ('--ref_nii')"
 
-    # Constants
-    l21_radius = args.mean_distance * args.resample
+    with perf_timer("Loading streamlines"):
+        slines = load_slines(args.in_tractogram, input_header)
 
-    time3_s = time.perf_counter()  # TODO timer start 3 (loading sub)
-    slines = load_slines(args.in_tractogram, input_header)
     if args.max_slines:
         slines = slines[:args.max_slines]
-    time3_e = time.perf_counter()  # TODO timer end 3 (loading sub)
-    print(f"nb_slines, {len(slines)}")
-    print(f"loading_sub, {time3_e - time3_s}")
 
-    # Resample streamlines
-    time4_s = time.perf_counter()  # TODO timer start 4 (resampling sub)
-    slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
-    time4_e = time.perf_counter()  # TODO timer end 4 (resampling sub)
-    print(f"resampling_sub, {time4_e - time4_s}")
+    with perf_timer("Resample streamlines"):
+        slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
 
-    # Compute mean-points
-    time5_s = time.perf_counter()  # TODO timer start 5 (mpts sub)
-    slines_mpts = aggregate_meanpts(slines_arr, args.nb_mpts)
-    time5_e = time.perf_counter()  # TODO timer end 5 (mpts sub)
-    print(f"mpts_sub, {time5_e - time5_s}")
+    del slines  # reduce memory usage
 
-    del slines
+    # Load Ref Tractogram
+    if not run_on_self:
+        list_streamlines = []
+        with perf_timer("Load reference"):
+            for ref_id, ref_tractogram in enumerate(args.ref_tractograms):
 
-    # run timer
-    #run_naive(l21_radius, list_slines_ref, slines_arr)
-    run_naive_self(l21_radius, slines_arr)
+                ref_header = ref_tractogram
+                if args.ref_nii:
+                    ref_header = args.ref_nii
+                else:
+                    assert ".trk" in ref_tractogram, "Non-'.trk' files requires a Nifti file ('--ref_nii')"
 
-    #run_tractosearch_radius(l21_radius, list_slines_ref_mpts, list_slines_ref, slines_mpts, slines_arr, args.cpu)
+                # Load reference tractogram
+                list_streamlines.extend(load_slines(ref_tractogram, ref_header))
 
-    #run_tractosearch_radius_self(l21_radius, slines_mpts, slines_arr, args.cpu)
-
-    # run_tractosearch_knn_self(args.knn, l21_radius, slines_arr, args.cpu)
-
-    # run_fss(args.mean_distance, list_slines_ref, args.resample, slines_arr)
-
-
-def run_naive(l21_radius, list_slines_ref, slines_arr):
-    if len(slines_arr) > 1000000 :
-        print("impossible .....")
-        exit()
-    elif len(slines_arr) > 1000 :
-        print("this will take a while .....")
+        # Resample streamlines
+        with perf_timer("Resampling reference"):
+            slines_ref = resample_slines_to_array(list_streamlines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
+        del list_streamlines  # reduce memory usage
     else:
-        print("Ok naive .....")
+        slines_ref = np.copy(slines_arr)
 
-    time_naive_s = time.perf_counter()  # TODO timer start naive
-    for ref_slines in list_slines_ref:
-        diff = ref_slines[:, None, ...] - slines_arr
-        res = l21(diff)
-        mask = res < l21_radius # identify index
-    time_naive_e = time.perf_counter()  # TODO timer end naive
-    print(f"naive_dist, {time_naive_e - time_naive_s}")
-
-
-def run_naive_self(l21_radius, slines_arr, nb2=50):
-    if nb2 > 1000:
-        print("impossible .....")
-        exit()
-    elif nb2 > 100:
-        print("this will take a while .....")
+    # Run timer
+    if args.max_for_naive > 100000:
+        print("Naive : impossible .....")
     else:
-        print("Ok naive .....")
+        with perf_timer(f"Naive_with {len(slines_ref)}x{len(slines_arr[:args.max_for_naive])}") as t:
+            run_naive(slines_ref.shape[1] * args.mdf, slines_ref, slines_arr[:args.max_for_naive])
 
-    time_naive_s = time.perf_counter()  # TODO timer start naive
-    diff = slines_arr[:, None, ...] - slines_arr[:nb2]
+        extrapolated = t["elapsed"]*len(slines_arr)/len(slines_arr[:args.max_for_naive])
+        if bidirectional:
+            print_timer(f" extrapolated {2*len(slines_ref)}x{len(slines_arr)}", 2.0*extrapolated)
+        else:
+            print_timer(f" extrapolated {len(slines_ref)}x{len(slines_arr)}", extrapolated)
+
+    for nb_mpts in args.mpts:
+        nb_mpts = int(nb_mpts)
+        if run_on_self:
+            print(f"=== Tree(input).search(input) {nb_mpts}-mpts ===")
+            run_self_radius_searches(args.mdf, slines_arr, nb_mpts, args.cpu, bidirectional)
+        else:
+            print(f"=== Tree(ref).search(input) {nb_mpts}-mpts ===")
+            run_radius_searches(args.mdf, slines_ref, slines_arr, nb_mpts, args.cpu, bidirectional)
+
+            # print(f"=== Tree(input).search(ref) {nb_mpts}-mpts ===")
+            # run_radius_searches(args.mdf, slines_arr, slines_ref, nb_mpts, args.cpu, bidirectional)
+
+
+def run_naive(l21_radius, slines_ref, slines_arr):
+    diff = slines_ref[:, None, ...] - slines_arr
     res = l21(diff)
     mask = res < l21_radius  # identify index
-    time_naive_e = time.perf_counter()  # TODO timer end naive
-    print(f"naive_self_dist, {time_naive_e - time_naive_s}")
-    print(res.shape)
+    return
 
 
-def run_tractosearch_radius(l21_radius, list_slines_ref_mpts, list_slines_ref, slines_mpts, slines_arr, nb_cpus):
-    max_val = np.float32(2.0 * l21_radius)
+def run_radius_searches(mdf, slines_ref, slines_arr, nb_mpts, nb_cpu, flip=False):
+    nb_pts = slines_arr.shape[1]
+    l21_radius = mdf * nb_pts
 
-    # Generate the L21 k-d tree with LpqTree
-    time6a_s = time.perf_counter()  # TODO timer start 6a (tree sub)
-    nn = lpqtree.KDTree(metric="l21", radius=l21_radius)
-    nn.fit(slines_mpts)
-    time6a_e = time.perf_counter()  # TODO timer end 6a (tree sub)
-    print(f"tree_sub, {time6a_e - time6a_s}")
+    if flip:
+        slines_ref = np.concatenate([slines_ref, np.flip(slines_ref, axis=1)])
 
-    # Search in each given reference tractogram
-    for nb_cpu in nb_cpus:
-        time8_s = time.perf_counter()  # TODO timer start 8 (search sub)
-        min_dist = np.full(len(slines_arr), max_val, dtype=np.float32)
-        min_id = np.full(len(slines_arr), len(list_slines_ref), dtype=int)
+    with perf_timer(f"FSS_search"):
+        fs_tree_af = FastStreamlineSearch(ref_streamlines=slines_ref,
+                                          max_radius=mdf,
+                                          resampling=nb_pts,
+                                          nb_mpts=nb_mpts,
+                                          bidirectional=False)
+        coo_mdist_mtx = fs_tree_af.radius_search(slines_arr, radius=mdf, use_negative=False)
 
-        for ref_id, ref_tractogram in enumerate(list_slines_ref):
-            # Fast Streamline Search
-            nn.radius_neighbors_full(list_slines_ref_mpts[ref_id], slines_arr, ref_tractogram, l21_radius, n_jobs=nb_cpu)
-
-            # Update the nearest distance
-            coo_mtx = nn.get_coo_matrix()
-            # if coo_mtx.nnz > 0:
-            #     nz_sline_ids, _, dist = nearest_from_matrix_col(coo_mtx)
-            #     nz_sline_prev_min = min_dist[nz_sline_ids]
-            #     new_min = dist < nz_sline_prev_min
-            #
-            #     new_min_ids = nz_sline_ids[new_min]
-            #     if len(new_min_ids) > 0:
-            #         if len(nz_sline_ids) == 1:
-            #             min_dist[new_min_ids] = dist
-            #         else:
-            #             min_dist[new_min_ids] = dist[new_min]
-            #         min_id[new_min_ids] = ref_id
-
-        #unique_ref_id, list_sline_ids = split_unique_indices(min_id)
-        time8_e = time.perf_counter()  # TODO timer end 8 (search atlas sub)
-        print(f"search_atlas_sub_{nb_cpu}cpu, {time8_e - time8_s}")
-        #test = (len(unique_ref_id), len(list_sline_ids))
-
-        del nn # reset "nn" lpqtree for safety and memory
-        del coo_mtx
+    with perf_timer(f"Tractosearch_search_{nb_cpu}cpu"):
+        slines_arr_mpts = aggregate_meanpts(slines_arr, nb_mpts)
+        slines_ref_mpts = aggregate_meanpts(slines_ref, nb_mpts)
         nn = lpqtree.KDTree(metric="l21", radius=l21_radius)
-        nn.fit(slines_mpts)
+        nn.fit(slines_ref_mpts)
+        nn.radius_neighbors_full(slines_arr_mpts, slines_ref, slines_arr, l21_radius, n_jobs=nb_cpu)
+        coo_mtx = nn.get_coo_matrix()
+
+    with perf_timer(f"Tractosearch_fit_run_{nb_cpu}cpu"):
+        nn = lpqtree.KDTree(metric="l21", radius=l21_radius)
+        nn.fit_and_radius_search(slines_ref, slines_arr, l21_radius, n_jobs=nb_cpu, nb_mpts=nb_mpts)
+        coo_mtx = nn.get_coo_matrix()
+    return
 
 
-def run_tractosearch_radius_self(l21_radius, slines_mpts, slines_arr, nb_cpus):
-    slines_mpts_boths = np.concatenate([slines_mpts, np.flip(slines_mpts, axis=1)])
-    slines_arr_both = np.concatenate([slines_arr, np.flip(slines_arr, axis=1)])
+def run_self_radius_searches(mdf, slines_arr, nb_mpts, nb_cpu, bidirectional=False):
+    nb_slines_no_flip = slines_arr.shape[0]
+    nb_pts = slines_arr.shape[1]
+    l21_radius = mdf * nb_pts
 
-    time6b_s = time.perf_counter()  # TODO timer start 6b (tree sub)
-    nn_both = lpqtree.KDTree(metric=SLINE_METRIC, radius=l21_radius)
-    nn_both.fit(slines_mpts_boths)
-    time6b_e = time.perf_counter()  # TODO timer start 6b (tree sub)
-    print(f"tree_both_sub, {time6b_e - time6b_s}")
+    if bidirectional:
+        slines_ref = np.concatenate([slines_arr, np.flip(slines_arr, axis=1)])
+        # slines_arr = slines_arr
+    else:
+        slines_ref = slines_arr
+        # slines_arr = slines_arr
 
-    for nb_cpu in nb_cpus:
-        time9_s = time.perf_counter()  # TODO timer start 9 (search radius self sub)
-        nn_both.radius_neighbors_full(slines_mpts, slines_arr_both, slines_arr, l21_radius, n_jobs=nb_cpu)
-        time9_e = time.perf_counter()  # TODO timer end 9 (search radius self sub)
-        print(f"search_rself_sub_{nb_cpu}cpu, {time9_e - time9_s}")
+    with perf_timer(f"FSS_search"):
+        fs_tree_af = FastStreamlineSearch(ref_streamlines=slines_ref,
+                                          max_radius=mdf,
+                                          resampling=nb_pts,
+                                          nb_mpts=nb_mpts,
+                                          bidirectional=False)
+        coo_mdist_mtx = fs_tree_af.radius_search(slines_arr, radius=mdf, use_negative=False)
 
-        del nn_both # reset "nn" lpqtree for safety and memory
-        nn_both = lpqtree.KDTree(metric=SLINE_METRIC, radius=l21_radius)
-        nn_both.fit(slines_mpts_boths)
+    with perf_timer(f"Tractosearch_search_{nb_cpu}cpu"):
+        slines_ref_mpts = aggregate_meanpts(slines_ref, nb_mpts)
+        slines_arr_mpts = aggregate_meanpts(slines_arr, nb_mpts)
+        nn = lpqtree.KDTree(metric="l21", radius=l21_radius)
+        nn.fit(slines_ref_mpts)
+        nn.radius_neighbors_full(slines_arr_mpts, slines_ref, slines_arr, l21_radius, n_jobs=nb_cpu)
+        coo_mtx = nn.get_coo_matrix()
 
+    with perf_timer(f"Tractosearch_self_search_{nb_cpu}cpu"):
+        slines_ref_mpts = aggregate_meanpts(slines_ref, nb_mpts)
+        nn = lpqtree.KDTree(metric="l21", radius=l21_radius)
+        nn.fit(slines_ref_mpts)
+        nn.self_radius_neighbors_full(slines_ref, l21_radius, n_jobs=nb_cpu, nb_pts_to_search=nb_slines_no_flip)
+        coo_mtx = nn.get_coo_matrix()
 
-def run_tractosearch_knn_self(knn, l21_radius, slines_arr, nb_cpus):
-    slines_arr_both = np.concatenate([slines_arr, np.flip(slines_arr, axis=1)])
+    with perf_timer(f"Tractosearch_fit_run_{nb_cpu}cpu"):
+        nn = lpqtree.KDTree(metric="l21", radius=l21_radius)
+        nn.fit_and_self_radius_search(slines_arr, l21_radius, n_jobs=nb_cpu, nb_mpts=nb_mpts, both_direction=True)
+        coo_mtx = nn.get_coo_matrix()
+    return
 
-    time6c_s = time.perf_counter()  # TODO timer start 6c (tree sub both)
-    nn_full_both = lpqtree.KDTree(metric=SLINE_METRIC, radius=l21_radius)
-    nn_full_both.fit(slines_arr_both)
-    time6c_e = time.perf_counter()  # TODO timer end 6c (search tree sub both)
-    print(f"tree_fullboth_sub {time6c_e - time6c_s}")
-    for nb_cpu in nb_cpus:
-        time10_s = time.perf_counter()  # TODO timer start 10 (search knn self sub)
-        nn_full_both.query(slines_arr, k=knn, return_distance=False, n_jobs=nb_cpu)
-        time10_e = time.perf_counter()  # TODO timer end 10 (search knn self sub)
-        print(f"search_kself_sub_{nb_cpu}cpu, {time10_e - time10_s}")
-
-        del nn_full_both # reset "nn" lpqtree for safety and memory
-        nn_full_both = lpqtree.KDTree(metric=SLINE_METRIC, radius=l21_radius)
-        nn_full_both.fit(slines_arr_both)
-
-        time11_s = time.perf_counter()  # TODO timer start 11 (search knn self sub)
-        nn_full_both.radius_knn(slines_arr, radius=l21_radius, k=knn, return_distance=False, n_jobs=nb_cpu)
-        time11_e = time.perf_counter()  # TODO timer end 11 (search knn self sub)
-        print(f"search_rkself_sub_{nb_cpu}cpu, {time11_e - time11_s}")
-
-        del nn_full_both # reset "nn" lpqtree for safety and memory
-        nn_full_both = lpqtree.KDTree(metric=SLINE_METRIC, radius=l21_radius)
-        nn_full_both.fit(slines_arr_both)
-
-
-def run_fss(radius, list_slines_ref, resampling, slines_arr):
-    # FAST Streamline search
-    # time12a_s = time.perf_counter()  # TODO timer start 12 (FSS)
-    # for ref_tractogram in list_slines_ref:
-    #     fs_tree_af = FastStreamlineSearch(ref_streamlines=ref_tractogram,
-    #                                       max_radius=radius,
-    #                                       resampling=resampling,
-    #                                       bidirectional=False) # already both dir
-    #     coo_mdist_mtx = fs_tree_af.radius_search(slines_arr, radius=radius, use_negative=False)
-    # time12a_e = time.perf_counter()  # TODO timer end 12 (FSS)
-    # print(f"FSSa, {time12a_e - time12a_s}")
-
-    # time12b_s = time.perf_counter()  # TODO timer start 12 (FSS)
-    # for ref_id, ref_tractogram in enumerate(args.ref_tractograms):
-    #     fs_tree_af = FastStreamlineSearch(ref_streamlines=slines_arr,
-    #                                       max_radius=radius,
-    #                                       resampling=resampling,
-    #                                       bidirectional=False) # already both dir
-    #     coo_mdist_mtx = fs_tree_af.radius_search(list_slines_ref[ref_id], radius=radius, use_negative=False)
-    # time12b_e = time.perf_counter()  # TODO timer end 12 (FSS)
-    # print(f"FSSb, {time12b_e - time12b_s}")
-    #
-    # ref_temp = list_slines_ref[ref_id]
-    # ref_temp = ref_temp[:len(ref_temp)//2]
-
-    # This one avoid reconstructing multiple tree
-    # time12c_s = time.perf_counter()  # TODO timer start 12 (FSS)
-    # fs_tree_af = FastStreamlineSearch(ref_streamlines=slines_arr,
-    #                                   max_radius=radius,
-    #                                   resampling=resampling,
-    #                                   bidirectional=True)
-    # time12c_e = time.perf_counter()  # TODO timer end 12 (FSS)
-    # print(f"FSS tree, {time12c_e - time12c_s}")
-    #
-    # time13c_s = time.perf_counter()  # TODO timer start 13 (FSS)
-    # for ref_id, ref_tractogram in enumerate(list_slines_ref):
-    #     coo_mdist_mtx = fs_tree_af.radius_search(ref_tractogram[:len(ref_tractogram)//2], radius=radius, use_negative=False)
-    # time13c_e = time.perf_counter()  # TODO timer end 13 (FSS)
-    # print(f"FSS search, {time13c_e - time13c_s}")
-
-    # This one avoid reconstructing multiple tree, and use less memory !
-    time12d_s = time.perf_counter()  # TODO timer start 12 (FSS)
-    fs_tree_af = FastStreamlineSearch(ref_streamlines=slines_arr,
-                                      max_radius=radius,
-                                      resampling=resampling,
-                                      bidirectional=False)
-    time12d_e = time.perf_counter()  # TODO timer end 12 (FSS)
-    print(f"FSS_tree_v2, {time12d_e - time12d_s}")
-
-    time13d_s = time.perf_counter()  # TODO timer start 13 (FSS)
-    for ref_id, ref_tractogram in enumerate(list_slines_ref):
-        coo_mdist_mtx = fs_tree_af.radius_search(ref_tractogram, radius=radius, use_negative=False)
-    time13d_e = time.perf_counter()  # TODO timer end 13 (FSS)
-    print(f"FSS_search_v2, {time13d_e - time13d_s}")
 
 if __name__ == '__main__':
     main()
