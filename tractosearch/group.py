@@ -167,6 +167,6 @@ def connected_components_split(sparse_mtx, list_of_ids):
     for ids in list_of_ids:
         lut[ids] = np.arange(len(ids))
         mtx_i = csr_mtx[ids]
-        new_mtx = csr_matrix((mtx_i.data, lut[mtx_i.indices], mtx_i.indptr))
+        new_mtx = csr_matrix((mtx_i.data, lut[mtx_i.indices], mtx_i.indptr), shape=(len(ids), len(ids)))
         list_of_mtx.append(new_mtx)
     return list_of_mtx

@@ -68,7 +68,7 @@ def knn_search(slines, slines_ref, k=1, metric="l21", both_dir=True, resample=24
 
 
 def radius_search(slines, slines_ref, radius, metric="l21", both_dir=True, resample=24,
-                  meanpts_resampling=True, lp1_mpts=4, nb_cpu=4, search_dtype=np.float32):
+                  meanpts_resampling=True, lp1_mpts=2, nb_cpu=4, search_dtype=np.float32):
     """
     Compute radius search for each streamlines in "slines" searching into "slines_ref",
     and return a scipy COOrdinates sparse matrix containing the neighborhood information.
@@ -141,12 +141,12 @@ def knn_search_arr(slines_arr, slines_ref_arr, k=1, metric="l21", nb_cpu=4):
     return ids_ref, dists
 
 
-def radius_search_arr(slines_arr, slines_ref_arr, radius, metric="l21", lp1_mpts=4, nb_cpu=4):
+def radius_search_arr(slines_arr, slines_ref_arr, radius, metric="l21", lp1_mpts=2, nb_cpu=4):
     """
     knn_search() internal function with resampled numpy array as input,
     see knn_search() for usage.
     """
-    if metric[-1] != "1":
+    if lp1_mpts >= slines_arr.shape[1] or metric[-1] != "1" or slines_arr.shape[1] :
         lp1_mpts = None
 
     nn = lpqtree.KDTree(metric=metric, radius=radius)
