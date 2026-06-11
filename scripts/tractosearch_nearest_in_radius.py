@@ -70,6 +70,9 @@ def _build_arg_parser():
                    help='Number of mean-points for the kdtree internal search, [%(default)s] \n'
                         'does not change the precision, only the computation time.')
 
+    p.add_argument('--alpha', type=float, default=0.5,
+                   help='Spread parameters')
+
     p.add_argument('--no_flip', action='store_true',
                    help='Disable the comparison in both streamlines orientation')
 
@@ -104,6 +107,12 @@ def _build_arg_parser():
     return p
 
 
+def w_sqr(alpha, n):
+    x = np.linspace(-1, 1, n)
+    f = alpha * (x ** 2) + (1 - alpha) * (1 - x ** 2)
+    return n * f / np.sum(f)
+
+
 def main():
     parser = _build_arg_parser()
     args = parser.parse_args()
@@ -116,11 +125,14 @@ def main():
     else:
         assert ".trk" in args.in_tractogram, "Non-'.trk' files requires a Nifti file ('--in_nii')"
 
+    weights = w_sqr(args.alpha, args.resample).reshape(1, args.resample, 1)
+
     # Load input Tractogram
     slines = load_slines(args.in_tractogram, input_header)
 
     # Resample streamlines
     slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
+    slines_arr *= weights
 
     if args.transform:
         trfo = np.loadtxt(args.transform)
@@ -158,6 +170,8 @@ def main():
 
         # Resample streamlines
         slines_ref = resample_slines_to_array(slines_ref, args.resample, meanpts_resampling=True, out_dtype=np.float32)
+
+        slines_ref *= weights
         slines_ref_mpts = aggregate_meanpts(slines_ref, args.nb_mpts)
 
         if not args.no_flip:
