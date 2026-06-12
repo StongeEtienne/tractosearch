@@ -8,10 +8,10 @@ import logging
 
 import numpy as np
 import hdbscan
+import lpqtree
 
 from tractosearch.io import load_slines, save_slines
-from tractosearch.resampling import meanpts_slines
-from tractosearch.search import radius_search
+from tractosearch.resampling import resample_slines_to_array
 from tractosearch.group import connected_components_indices, connected_components_split, group_unique_labels, group_to_centroid
 
 
@@ -54,11 +54,6 @@ def _build_arg_parser():
     p.add_argument('--min_cluster', type=int, default=2,
                    help='Minimum number of streamlines in a cluster [%(default)s]')
 
-    p.add_argument('--method', default="connected_components", choices=("connected_components", "hdbscan"),
-                   help='Cluster method   [%(default)s]')
-
-    p.add_argument('--allow_single_cluster', action='store_true',
-                   help='hdbscan allow_single_cluster')
 
     p.add_argument('--resample', type=int, default=24,
                    help='Resample the number of mean-points in streamlines, [%(default)s] \n'
@@ -68,6 +63,9 @@ def _build_arg_parser():
     p.add_argument('--nb_mpts', type=int, default=4,
                    help='Number of mean-points for the kdtree internal search, [%(default)s] \n'
                         'does not change the precision, only the computation time.')
+
+    p.add_argument('--hdbscan', action='store_true',
+                   help='Cluster each group into subgroups with ths hdbscan mean distance')
 
     p.add_argument('--no_flip', action='store_true',
                    help='Disable the comparison in both streamlines orientation')
@@ -103,25 +101,26 @@ def main():
 
     logging.info(f"Loading tractogram")
     slines = load_slines(args.in_tractogram, input_header)
-    slines_arr = meanpts_slines(slines, args.resample)
+    slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True)
 
     logging.info(f"Computing the L21 distance matrix  with LpqTree")
-    l21_radius = args.mean_distance * args.resample
-    dist_mtx = radius_search(slines_arr, None, radius=l21_radius, metric=sline_metric, both_dir=not args.no_flip,
-                             resample=args.resample, lp1_mpts=args.nb_mpts, nb_cpu=args.cpu, search_dtype=np.float32)
+    logging.info(f"Computing the L21 distance matrix with LpqTree")
+    l21_radius = args.mean_distance * slines_arr.shape[1]
+    l21tree = lpqtree.KDTree(metric=sline_metric)
+    dist_mtx = l21tree.fit_and_self_radius_search(slines_arr, l21_radius, n_jobs=args.cpu, nb_mpts=args.nb_mpts, both_direction=not args.no_flip)
 
     # Group connected components
-    dist_mtx.data = np.abs(dist_mtx.data)
     dist_mtx = dist_mtx.tocsr()
-
     list_of_indices = connected_components_indices(dist_mtx)
     list_of_mtx = connected_components_split(dist_mtx, list_of_indices)
+    print(f"coo_mtx : {dist_mtx.shape}")
+    print(f"Nb group : {len(list_of_indices)}")
 
     un_clustered = []
     slines_cent = []
     group_id = 0
 
-    if args.method == 'connected_components':
+    if not args.hdbscan:
         prefix = f"{args.out_folder}/tractosearch_components"
         for slines_ids, mtx_i in zip(list_of_indices, list_of_mtx):
             if len(slines_ids) < args.min_cluster:
@@ -133,21 +132,21 @@ def main():
                 save_slines(output_name, slines, indices=slines_ids, ref_file=input_header)
                 group_id += 1
 
-    elif args.method == 'hdbscan':
+    else :
         prefix = f"{args.out_folder}/tractosearch_hdbscan"
         for slines_ids, mtx_i in zip(list_of_indices, list_of_mtx):
             if len(slines_ids) < args.min_cluster:
                 un_clustered.append(slines_ids)
                 continue
 
-            print("HDBscan... " + str(group_id))
+            print("HDBscan " + str(group_id))
             # HDBSCAN on each set of connected components
             clusterer = hdbscan.HDBSCAN(metric='precomputed',
                                         min_cluster_size=args.min_cluster,
                                         max_dist=l21_radius,
-                                        allow_single_cluster=args.allow_single_cluster)
+                                        allow_single_cluster=True)
             clusterer.fit(mtx_i)
-            print("group labels... " + str(group_id))
+            print("group labels " + str(group_id))
             unique_labels, ids_per_unique_labels = group_unique_labels(clusterer.labels_)
             # Separate each group in HDBSCAN
             for hdbscan_id, mtx_i_ids in zip(unique_labels, ids_per_unique_labels):
