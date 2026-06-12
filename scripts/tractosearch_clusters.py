@@ -63,9 +63,6 @@ def _build_arg_parser():
                    help='Number of mean-points for the kdtree internal search, [%(default)s] \n'
                         'does not change the precision, only the computation time.')
 
-    p.add_argument('--hdbscan', action='store_true',
-                   help='Cluster each group into subgroups with ths hdbscan mean distance')
-
     p.add_argument('--no_flip', action='store_true',
                    help='Disable the comparison in both streamlines orientation')
 
