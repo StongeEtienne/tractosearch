@@ -2,12 +2,13 @@
 
 import numpy as np
 
-# optional import (numba)
 try:
+    # optional import
     from numba import njit
 except ImportError:
     print("Info: some functions in tractosearch.resampling"
           " are faster when 'numba' is installed")
+
     # create a generic (useless) decorator
     def njit(*args, **kwargs):
         def decorator(func):
@@ -15,57 +16,10 @@ except ImportError:
         return decorator
 
 
-ITYPE = np.int64
 RTYPE = np.float64
 OUTTYPE = np.float32
 EPS = RTYPE(1.0e-8)
 
-
-def meanpts_slines(slines, nb_pts):
-    """
-    Alternative to resample_slines_to_array() with check
-      if already the correct shape : no resampling
-      else (if possible) use aggregate, else resample
-
-    Parameters
-    ----------
-    slines : list of numpy array
-        Streamlines
-    nb_pts : integer
-        Resample with this number of points
-    """
-    if isinstance(slines, np.ndarray) :
-        assert slines.ndim == 3
-        current_size = slines.shape[1]
-        if current_size == nb_pts:
-            return slines.astype(OUTTYPE)
-        elif current_size % nb_pts == 0:
-            return aggregate_meanpts(slines, nb_pts).astype(OUTTYPE)
-    return resample_slines_to_array(slines, nb_pts, meanpts_resampling=True, out_dtype=OUTTYPE)
-
-
-def resample_and_aggregate(slines, nb_low, nb_high, flip=False):
-    """
-    Resample a list of streamlines to a given number of mean-points
-    and aggregate to a smaller number
-
-    Parameters
-    ----------
-    slines : list of numpy array
-        Streamlines
-    nb_low : integer
-        Resample with this number of points
-    nb_high : integer
-        Resample with this number of points
-    flip : bool
-        return both direction
-    """
-    slines_h = meanpts_slines(slines, nb_high)
-    slines_l = aggregate_meanpts(slines_h, nb_low)
-    if flip:
-        slines_h = np.concatenate([slines_h, np.flip(slines_h, axis=1)])
-        slines_l = np.concatenate([slines_l, np.flip(slines_l, axis=1)])
-    return slines_l, slines_h
 
 def resample_slines_to_array(slines, nb_pts, meanpts_resampling=True, out_dtype=OUTTYPE):
     """
@@ -108,38 +62,6 @@ def resample_slines_to_array(slines, nb_pts, meanpts_resampling=True, out_dtype=
             slines_arr[i] = resample_sline(sline_i, nb_pts)
     return slines_arr
 
-def aggregate_meanpts(slines_arr, nb_mpts, flatten_output=False):
-    """
-    Aggregate / average a streamlines array to a given number of mean-points
-
-    Parameters
-    ----------
-    slines_arr : numpy array (nb_slines x nb_pts x d)
-        Streamlines represented with an numpy array
-    nb_mpts : integer
-        Aggregate streamlines to this number of points
-        This must be a factor of the slines_arr number of points
-    flatten_output : bool
-        flatten the output (nb_slines x nb_pts*d)
-
-    Returns
-    -------
-    res : numpy array (nb_slines x nb_mpts x d)
-        Aggregated version of streamlines
-
-    References
-    ----------
-    .. [StOnge2021] St-Onge E. et al., Fast Tractography Streamline Search,
-        International Workshop on Computational Diffusion MRI,
-        pp. 82-95. Springer, Cham, 2021.
-    """
-    assert(slines_arr.shape[1] % nb_mpts == 0)
-    nb_slines = len(slines_arr)
-    meanpts = np.mean(slines_arr.reshape((nb_slines, nb_mpts, -1, 3)), axis=2)
-    if flatten_output:
-        return meanpts.reshape((nb_slines, -1))
-    return meanpts
-
 
 @njit()
 def split_slines_to_array(slines, mpts_length, nb_mpts, overlap, out_dtype=OUTTYPE):
@@ -172,11 +94,14 @@ def split_slines_to_array(slines, mpts_length, nb_mpts, overlap, out_dtype=OUTTY
         International Workshop on Computational Diffusion MRI,
         pp. 82-95. Springer, Cham, 2021.
     """
-    ## cannot check type with assert
     # if overlap >= nb_mpts:
     #     raise ValueError(f"overlap must be smaller than nb_mpts")
+    # if not out_dtype:
+    #     out_dtype = slines[0].dtype
+
     sub_slines = []
-    slines_ids = np.zeros(len(slines), dtype=ITYPE)
+
+    slines_ids = np.zeros(len(slines), dtype=np.int32)
     for i, sline in enumerate(slines):
         mpts_arr = meanpts_sline(sline.astype(RTYPE), mpts_length=mpts_length)
         it = range(0, len(mpts_arr) - nb_mpts + 1, nb_mpts - overlap)
@@ -189,6 +114,40 @@ def split_slines_to_array(slines, mpts_length, nb_mpts, overlap, out_dtype=OUTTY
         arr[i] = t
 
     return arr, slines_ids
+
+
+def aggregate_meanpts(slines_arr, nb_mpts, flatten_output=False):
+    """
+    Aggregate / average a streamlines array to a given number of mean-points
+
+    Parameters
+    ----------
+    slines_arr : numpy array (nb_slines x nb_pts x d)
+        Streamlines represented with an numpy array
+    nb_mpts : integer
+        Aggregate streamlines to this number of points
+        This must be an factor of the slines_arr number of points
+    flatten_output : bool
+        flatten the output (nb_slines x nb_pts*d)
+
+    Returns
+    -------
+    res : numpy array (nb_slines x nb_mpts x d)
+        Aggregated version of streamlines
+
+    References
+    ----------
+    .. [StOnge2021] St-Onge E. et al., Fast Tractography Streamline Search,
+        International Workshop on Computational Diffusion MRI,
+        pp. 82-95. Springer, Cham, 2021.
+    """
+    assert(slines_arr.shape[1] % nb_mpts == 0)
+    nb_slines = len(slines_arr)
+    meanpts = np.mean(slines_arr.reshape((nb_slines, nb_mpts, -1, 3)), axis=2)
+    if flatten_output:
+        return meanpts.reshape((nb_slines, -1))
+    else:
+        return meanpts
 
 
 @njit()
@@ -242,6 +201,7 @@ def resample_sline(sline, nb_rpts):
             k += 1
 
     res_sline[-1] = sline[-1]
+
     return res_sline
 
 
@@ -275,6 +235,7 @@ def meanpts_sline(sline, nb_mpts: int = 0, mpts_length: float = 0.0):
         International Workshop on Computational Diffusion MRI,
         pp. 82-95. Springer, Cham, 2021.
     """
+
     # Get the lengths of each segment
     # seg_lenghts = sline_segments_lengths(sline, normalize=False) # jit optimisation
     seg_lenghts = np.sqrt(np.sum((sline[1:] - sline[:-1]) ** 2, axis=1))
@@ -325,7 +286,7 @@ def meanpts_sline(sline, nb_mpts: int = 0, mpts_length: float = 0.0):
             ratio = (mpts_length - cur_l) / seg_l
             new_pts = prev_pt + ratio * (sline[next_id] - prev_pt)
 
-            # b.2) compute the mid-point
+            # b.2) compute the mid point
             seg_mpt = RTYPE(0.5) * (prev_pt + new_pts)
             meanpts[curr_mpts_id] += (ratio * seg_l / mpts_length) * seg_mpt
             curr_mpts_id += 1
@@ -383,15 +344,16 @@ def streamlines_to_segments(slines):
     for sline_i in slines:
         if len(sline_i) == 1:
             vts_0_list.append(sline_i[0])
-            vts_1_list.append(sline_i[0])
-        else:
-            vts_0_list.append(sline_i[:-1])
-            vts_1_list.append(sline_i[1:])
-    return np.stack((np.vstack(vts_0_list), np.vstack(vts_1_list)), axis=1)
+            vts_0_list.append(sline_i[0])
+        vts_0_list.append(sline_i[:-1])
+        vts_1_list.append(sline_i[1:])
+
+    segments = np.stack((np.vstack(vts_0_list), np.vstack(vts_1_list)), axis=1)
+    return segments
 
 
 def streamlines_to_endpoints(slines):
-    """ Extract starting [:,0] and ending [:,1] points for each streamline.
+    """ Extract starting [:,0] and ending [:,1] points for each streamlines.
 
     Parameters
     ----------
@@ -403,7 +365,9 @@ def streamlines_to_endpoints(slines):
     endpoints : numpy.ndarray (2D)
         Endpoint array representation with the first and last points.
     """
-    endpoints = np.zeros((len(slines), 2, 3))
+    nb_slines = len(slines)
+
+    endpoints = np.zeros((nb_slines, 2, 3))
     for i, streamline in enumerate(slines):
         endpoints[i, 0] = streamline[0]
         endpoints[i, 1] = streamline[-1]

@@ -9,7 +9,7 @@ import numpy as np
 import lpqtree
 
 from tractosearch.io import load_slines, save_slines
-from tractosearch.resampling import resample_and_aggregate
+from tractosearch.resampling import resample_slines_to_array, aggregate_meanpts
 
 
 DESCRIPTION = """
@@ -58,7 +58,7 @@ def _build_arg_parser():
     p.add_argument('out_folder',
                    help='Output streamlines folder')
 
-    p.add_argument('--resample', type=int, default=24,
+    p.add_argument('--resample', type=int, default=32,
                    help='Resample the number of mean-points in streamlines, [%(default)s] \n'
                         'A lower number will increase the number of False positive, \n'
                         'where a streamline with distance > mean_distance could be included.')
@@ -101,8 +101,11 @@ def main():
         assert ".trk" in args.in_tractogram, "Non-'.trk' files requires a Nifti file ('--in_nii')"
 
     # Load input Tractogram
-    slines = load_slines(args.in_tractogram, args.in_nii)
-    slines_l21_mpts, slines_arr = resample_and_aggregate(slines, args.nb_mpts, args.resample)
+    slines = load_slines(args.in_tractogram, input_header)
+
+    # Resample input streamlines
+    slines_arr = resample_slines_to_array(slines, args.resample, meanpts_resampling=True, out_dtype=np.float32)
+    slines_l21_mpts = aggregate_meanpts(slines_arr, args.nb_mpts)
 
     # Generate the L21 k-d tree with LpqTree
     l21_radius = args.mean_distance * args.resample
@@ -115,9 +118,24 @@ def main():
 
     # Search in each given reference tractogram
     for ref_tractogram in args.ref_tractograms:
+
+        ref_header = ref_tractogram
+        if args.ref_nii:
+            ref_header = args.ref_nii
+        else:
+            assert ".trk" in ref_tractogram, "Non-'.trk' files requires a Nifti file ('--ref_nii')"
+
         # Load reference tractogram
-        slines_ref = load_slines(ref_tractogram, args.ref_nii)
-        slines_ref_mpts, slines_ref = resample_and_aggregate(slines_ref, args.nb_mpts, args.resample, flip=(not args.no_flip))
+        slines_ref = load_slines(ref_tractogram, ref_header)
+
+        # Resample streamlines
+        slines_ref = resample_slines_to_array(slines_ref, args.resample, meanpts_resampling=True, out_dtype=np.float32)
+        slines_ref_mpts = aggregate_meanpts(slines_ref, args.nb_mpts)
+
+        if not args.no_flip:
+            # Duplicate all streamlines in opposite orientation
+            slines_ref = np.concatenate([slines_ref, np.flip(slines_ref, axis=1)])
+            slines_ref_mpts = np.concatenate([slines_ref_mpts, np.flip(slines_ref_mpts, axis=1)])
 
         # Fast Streamline Search
         nn.radius_neighbors_full(slines_ref_mpts, slines_arr, slines_ref, l21_radius, n_jobs=args.cpu)
