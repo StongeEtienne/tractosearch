@@ -75,16 +75,16 @@ def mpts_binning(slines, binning_nb=2, bin_size=8.0, min_corner=None, max_corner
 
     # Binning functions
     if binning_nb == 1:
-        assert MAXINT >= INTFULL, f"Integer overflow, from shape {bin_shape} ** {binning_nb}"
+        assert MAXINT >= INTFULL, f"Integer overflow {BIN_DTYPE}, from shape {bin_shape} ** {binning_nb}"
         return mpts_id[:, 0], np.zeros(len(mpts_id), dtype=bool)
     elif binning_nb == 2:
-        assert MAXINT >= INTTRI, f"Integer overflow, from shape {bin_shape} ** {binning_nb}"
+        assert MAXINT >= INTTRI, f"Integer overflow {BIN_DTYPE}, from shape {bin_shape} ** {binning_nb}"
         return _binning_2mpts(mpts_id, max_bin_id)
     elif binning_nb == 3:
-        assert MAXINT >= INTTRI*INTFULL, f"Integer overflow, from shape {bin_shape} ** {binning_nb}"
+        assert MAXINT >= INTTRI*INTFULL, f"Integer overflow {BIN_DTYPE}, from shape {bin_shape} ** {binning_nb}"
         return _binning_3mpts(mpts_id, max_bin_id)
     elif binning_nb == 4:
-        assert MAXINT >= INTFULL*INTFULL * (INTFULL*INTFULL + 1) // 2, f"Integer overflow, from shape {bin_shape} ** {binning_nb}"
+        assert MAXINT >= INTFULL*INTFULL * (INTFULL*INTFULL + 1) // 2, f"Integer overflow {BIN_DTYPE}; , from shape {bin_shape} ** {binning_nb}"
         return _binning_4mpts(mpts_id, max_bin_id)
     else:
         raise NotImplementedError()

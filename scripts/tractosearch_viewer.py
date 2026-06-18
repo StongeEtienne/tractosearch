@@ -9,7 +9,7 @@ import numpy as np
 import lpqtree
 
 from tractosearch.io import load_slines
-from tractosearch.resampling import meanpts_slines, split_slines_to_array
+from tractosearch.resampling import resample_slines_to_array, split_slines_to_array
 from tractosearch.binning import simplify
 
 try:
@@ -71,7 +71,7 @@ def main():
         else:
             ref = tractogram
 
-        slines.append(meanpts_slines(load_slines(tractogram, ref), args.resample))
+        slines.append(resample_slines_to_array(load_slines(tractogram, ref), args.resample))
     slines = np.concatenate(slines)
 
     # Generate the L21 k-d tree with LpqTree
