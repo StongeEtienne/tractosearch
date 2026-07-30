@@ -228,8 +228,12 @@ def simplify(slines, bin_size=8.0, binning_nb=2, method="median", nb_mpts=16, re
 
     Returns
     -------
-    bin_id : numpy array int (nb_slines)
-        Bin id for each streamline
+    bin_centroids : numpy.ndarray
+        One representative streamline for each occupied bin.
+
+    count : numpy.ndarray, optional
+        Number of streamlines in each occupied bin.
+        Returned only when "return_count=True".
     """
 
     slines_mpts = resample_slines_to_array(slines, nb_mpts, out_dtype=dtype)
